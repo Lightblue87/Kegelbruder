@@ -5,11 +5,12 @@ Verantwortlichkeiten:
 - Hauptfenster aufbauen (Menü, Toolbar, Punkteingabe-Grid)
 - Spielstart, Abort, Snapshot, Restore
 - Session-Buchungen (Rollback-fähig)
-- Archivansicht
 - Delegation der GUI-Bereiche an gui/ Module:
-    gui/attendance.py   → AttendanceFlow
-    gui/billing.py      → BillingWindow
-    gui/cash_management → CashManagementWindow
+    gui/attendance.py        → AttendanceFlow
+    gui/billing.py           → BillingWindow
+    gui/cash_management.py   → CashManagementWindow
+    gui/archive.py           → ArchiveWindow
+    gui/player_management.py → PlayerManagementWindow
 """
 
 import logging
@@ -18,11 +19,13 @@ from datetime import datetime
 from tkinter import messagebox, ttk
 
 from cashbox import Kasse
-from config import DATA_FILE, AKTUELLES_SPIEL, HISTORIE_FILE
+from config import DATA_FILE, HISTORIE_FILE
 from data_handler import DatenHandler
+from gui.archive import ArchiveWindow
 from gui.attendance import AttendanceFlow
 from gui.billing import BillingWindow
 from gui.cash_management import CashManagementWindow
+from gui.player_management import PlayerManagementWindow
 from storage import AtomicFileWriter
 
 
@@ -185,146 +188,7 @@ class KegelBruederApp:
             self.abrechnung_button.config(state="disabled")
 
     def manage_players(self):
-        win = tk.Toplevel(self.root)
-        win.title("Spieler verwalten")
-
-        self.player_listbox = tk.Listbox(win, height=10, width=50)
-        self.player_listbox.grid(row=0, column=0, padx=10, pady=5, columnspan=3, sticky="ew")
-        self.update_player_list()
-
-        ttk.Label(win, text="Spielername:").grid(row=1, column=0, padx=10, pady=5, sticky="e")
-        name_entry = ttk.Entry(win)
-        name_entry.grid(row=1, column=1, padx=10, pady=5, sticky="w")
-
-        ttk.Label(win, text="Typ:").grid(row=2, column=0, padx=10, pady=5, sticky="e")
-        player_type = tk.StringVar(value="Stamm")
-        rb_stamm = ttk.Radiobutton(win, text="Stamm", variable=player_type, value="Stamm")
-        rb_gast  = ttk.Radiobutton(win, text="Gast",   variable=player_type, value="Gast")
-        rb_stamm.grid(row=2, column=1, padx=10, pady=5, sticky="w")
-        rb_gast.grid( row=2, column=2, padx=10, pady=5, sticky="w")
-
-        ttk.Label(win, text="Offener Betrag (€):").grid(row=3, column=0, padx=10, pady=5, sticky="e")
-        offener_betrag_var = tk.StringVar(value="0,00")
-        offener_entry      = ttk.Entry(win, textvariable=offener_betrag_var, width=10)
-        offener_entry.grid(row=3, column=1, padx=10, pady=5, sticky="w")
-
-        def _toggle_offen(*_):
-            if player_type.get() == "Stamm":
-                offener_entry.config(state="normal")
-            else:
-                offener_entry.config(state="disabled")
-                offener_betrag_var.set("0,00")
-        player_type.trace_add("write", _toggle_offen)
-        _toggle_offen()
-
-        def _parse_money(s: str) -> float:
-            s = (s or "0").strip().replace(",", ".")
-            try:
-                return max(0.0, float(s))
-            except ValueError:
-                return 0.0
-
-        def add_player():
-            name = name_entry.get().strip()
-            typ  = player_type.get()
-            if not name or typ not in ("Stamm", "Gast"):
-                return
-            mit = DatenHandler.laden_mitglieder()
-            if name in mit["players"]:
-                messagebox.showerror("Fehler", "Name existiert bereits.")
-                return
-            offene = _parse_money(offener_betrag_var.get()) if typ == "Stamm" else 0.0
-            mit["players"][name] = {
-                "typ": typ, "punkte": [0, 0, 0, 0], "offene_zahlung": float(offene)
-            }
-            DatenHandler.speichern_mitglieder(mit["players"])
-            self.update_player_list()
-            name_entry.delete(0, tk.END)
-            offener_betrag_var.set("0,00")
-            player_type.set("Stamm")
-
-        def remove_player():
-            sel      = self.player_listbox.get(tk.ACTIVE)
-            selected = sel.split(" (")[0] if sel else ""
-            if not selected:
-                return
-            mit = DatenHandler.laden_mitglieder()
-            if selected in mit["players"]:
-                if messagebox.askyesno("Spieler entfernen", f"{selected} wirklich löschen?"):
-                    del mit["players"][selected]
-                    DatenHandler.speichern_mitglieder(mit["players"])
-                    self.update_player_list()
-
-        def edit_player():
-            sel      = self.player_listbox.get(tk.ACTIVE)
-            selected = sel.split(" (")[0] if sel else ""
-            if not selected:
-                return
-            mit = DatenHandler.laden_mitglieder()
-            if selected not in mit["players"]:
-                return
-
-            pdata = mit["players"][selected]
-            ew    = tk.Toplevel(self.root)
-            ew.title("Spieler bearbeiten")
-
-            ttk.Label(ew, text="Neuer Name:").grid(row=0, column=0, padx=10, pady=5, sticky="e")
-            new_name_entry = ttk.Entry(ew)
-            new_name_entry.grid(row=0, column=1, padx=10, pady=5, sticky="w")
-            new_name_entry.insert(0, selected)
-
-            ttk.Label(ew, text="Typ:").grid(row=1, column=0, padx=10, pady=5, sticky="e")
-            typ_var = tk.StringVar(value=pdata.get("typ", "Stamm"))
-            rb_s = ttk.Radiobutton(ew, text="Stamm", variable=typ_var, value="Stamm")
-            rb_g = ttk.Radiobutton(ew, text="Gast",   variable=typ_var, value="Gast")
-            rb_s.grid(row=1, column=1, padx=10, pady=5, sticky="w")
-            rb_g.grid(row=1, column=2, padx=10, pady=5, sticky="w")
-
-            ttk.Label(ew, text="Offener Betrag (€):").grid(row=2, column=0, padx=10, pady=5, sticky="e")
-            offen_edit_var   = tk.StringVar(
-                value=f"{float(pdata.get('offene_zahlung', 0.0)):.2f}".replace(".", ",")
-            )
-            offen_edit_entry = ttk.Entry(ew, textvariable=offen_edit_var, width=10)
-            offen_edit_entry.grid(row=2, column=1, padx=10, pady=5, sticky="w")
-
-            def _toggle_offen_edit(*_):
-                if typ_var.get() == "Stamm":
-                    offen_edit_entry.config(state="normal")
-                else:
-                    offen_edit_entry.config(state="disabled")
-                    offen_edit_var.set("0,00")
-            typ_var.trace_add("write", _toggle_offen_edit)
-            _toggle_offen_edit()
-
-            def save_edit():
-                new_name = new_name_entry.get().strip()
-                new_typ  = typ_var.get()
-                if not new_name:
-                    return
-                if new_name != selected:
-                    mit["players"][new_name] = mit["players"].pop(selected)
-                mit["players"][new_name]["typ"] = new_typ
-                if new_typ == "Stamm":
-                    mit["players"][new_name]["offene_zahlung"] = _parse_money(offen_edit_var.get())
-                else:
-                    mit["players"][new_name]["offene_zahlung"] = 0.0
-                DatenHandler.speichern_mitglieder(mit["players"])
-                self.update_player_list()
-                ew.destroy()
-
-            ttk.Button(ew, text="Speichern", command=save_edit).grid(row=3, column=0, columnspan=3, pady=8)
-
-        ttk.Button(win, text="Hinzufügen", command=add_player).grid(row=4, column=0, pady=8)
-        ttk.Button(win, text="Entfernen",    command=remove_player).grid(row=4, column=1, pady=8)
-        ttk.Button(win, text="Bearbeiten",   command=edit_player).grid(row=4, column=2, pady=8)
-
-    def update_player_list(self):
-        if not hasattr(self, "player_listbox"):
-            return
-        self.player_listbox.delete(0, tk.END)
-        mit = DatenHandler.laden_mitglieder().get("players", {})
-        for p, d in sorted(mit.items()):
-            self.player_listbox.insert(tk.END, f"{p} ({d['typ']})")
+        PlayerManagementWindow(self.root)
 
     def create_punkteingabe(self):
         if hasattr(self, "punkte_frame"):
@@ -580,97 +444,7 @@ class KegelBruederApp:
             messagebox.showinfo("Spiel gesperrt", "Alle Felder gesperrt. Starte ein neues Spiel, um fortzufahren.")
 
     def show_archiv(self):
-        win = tk.Toplevel(self.root)
-        win.title("Archiv")
-        win.geometry("800x600")
-
-        data = DatenHandler._safe_read_json(HISTORIE_FILE, [])
-        try:
-            data = sorted(data, key=lambda e: datetime.strptime(
-                e.get("datum", "01.01.1900"), "%d.%m.%Y"), reverse=True)
-        except Exception:
-            pass
-
-        overview = ttk.Treeview(win, columns=("Datum", "Spieler", "Transaktionen"), show="headings")
-        overview.heading("Datum",         text="Datum")
-        overview.heading("Spieler",       text="Spieleranzahl")
-        overview.heading("Transaktionen", text="Transaktionen")
-        overview.column("Datum",         width=110, anchor="center")
-        overview.column("Spieler",       width=110, anchor="center")
-        overview.column("Transaktionen", width=140, anchor="center")
-        overview.pack(side="left", fill="y", padx=10, pady=10)
-
-        for entry in data:
-            datum       = entry.get("datum", "unbekannt")
-            num_players = len(entry.get("players", {}))
-            num_trans   = len(entry.get("transaktionen", []))
-            overview.insert("", "end", values=(datum, num_players, num_trans))
-
-        details = ttk.Frame(win)
-        details.pack(side="top", fill="both", expand=True, padx=10, pady=10)
-
-        ttk.Label(details, text="Finale Platzierung", font=("Arial", 10, "bold")).pack(pady=5)
-
-        place_tree = ttk.Treeview(
-            details,
-            columns=("Platz", "Spieler", "Einzelpunkte", "Summe", "Pumpen"),
-            show="headings", height=8
-        )
-        for col, txt, w, anchor in [
-            ("Platz",        "Platz",        60,  "center"),
-            ("Spieler",      "Spieler",      140, "w"),
-            ("Einzelpunkte", "Einzelpunkte", 160, "w"),
-            ("Summe",        "Punktesumme",  100, "center"),
-            ("Pumpen",       "Pumpen",       80,  "center"),
-        ]:
-            place_tree.heading(col, text=txt)
-            place_tree.column(col,  width=w, anchor=anchor)
-        place_tree.tag_configure("topPump", background="lightblue")
-        place_tree.pack(fill="x", padx=10, pady=5)
-
-        ttk.Label(details, text="Transaktionen", font=("Arial", 10, "bold")).pack(pady=5)
-        tx_tree = ttk.Treeview(details, columns=("Transaktion",), show="headings", height=8)
-        tx_tree.heading("Transaktion", text="Transaktion")
-        tx_tree.column("Transaktion",  anchor="w", width=500)
-        tx_tree.pack(fill="both", expand=True, padx=10, pady=5)
-
-        def on_select(event):
-            sel = overview.selection()
-            if not sel:
-                return
-            datum_sel = overview.item(sel[0], "values")[0]
-            for entry in data:
-                if entry.get("datum") == datum_sel:
-                    for n in place_tree.get_children():
-                        place_tree.delete(n)
-                    for n in tx_tree.get_children():
-                        tx_tree.delete(n)
-
-                    order       = entry.get("spieler_reihenfolge") or list(entry.get("players", {}).keys())
-                    pump_counts = {
-                        p: entry.get("players", {}).get(p, {}).get("pumpen", 0)
-                        for p in entry.get("players", {})
-                    }
-                    top_two = [p for p, _ in sorted(pump_counts.items(),
-                                                     key=lambda x: x[1], reverse=True)[:2]]
-
-                    for rank, player in enumerate(order, start=1):
-                        pdata       = entry.get("players", {}).get(player, {})
-                        punkte_list = pdata.get("punkte", [])
-                        punkte_str  = ", ".join(map(str, punkte_list))
-                        punkte_sum  = sum(punkte_list) if punkte_list else 0
-                        pumps       = pdata.get("pumpen", 0)
-                        tags        = ("topPump",) if player in top_two else ()
-                        place_tree.insert("", "end",
-                                          values=(rank, player, punkte_str, punkte_sum, pumps),
-                                          tags=tags)
-
-                    for t in entry.get("transaktionen", []):
-                        tx_tree.insert("", "end", values=(t,))
-                    break
-
-        overview.bind("<<TreeviewSelect>>", on_select)
-        ttk.Button(win, text="Schließen", command=win.destroy).pack(side="bottom", pady=10)
+        ArchiveWindow(self.root)
 
     def restore_players(self):
         mit        = DatenHandler.laden_mitglieder().get("players", {})
