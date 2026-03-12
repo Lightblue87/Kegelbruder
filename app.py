@@ -11,6 +11,7 @@ Verantwortlichkeiten:
     gui/cash_management.py   → CashManagementWindow
     gui/archive.py           → ArchiveWindow
     gui/player_management.py → PlayerManagementWindow
+    gui/settings.py          → KostenEinstellungenWindow
     gui/game_session.py      → GameSessionFrame
                                (Punkteingabe, Sperre/Entsperre, Snapshot/Restore,
                                 Tab-/Fokus-Navigation)
@@ -30,6 +31,7 @@ from gui.billing import BillingWindow
 from gui.cash_management import CashManagementWindow
 from gui.game_session import GameSessionFrame
 from gui.player_management import PlayerManagementWindow
+from gui.settings import KostenEinstellungenWindow
 from storage import AtomicFileWriter
 
 
@@ -141,43 +143,7 @@ class KegelBruederApp:
         )
 
     def open_kosten_einstellungen(self):
-        win = tk.Toplevel(self.root)
-        win.title("Kosten Einstellungen")
-
-        ttk.Label(win, text="Hier können die Kosten angepasst werden:", font=("Arial", 12, "bold")
-                  ).grid(row=0, column=0, columnspan=2, pady=10)
-
-        fields = ["Startgeld", "Pumpe", "Neuner", "Kranz", "Strafe Stamm", "Bahngebühr"]
-        vars_  = {}
-        row    = 1
-        for key in fields:
-            if key not in self.kasse.kasse:
-                defaults = {
-                    "Startgeld": 5.0, "Pumpe": 0.5, "Neuner": 1.0,
-                    "Kranz": 2.0, "Strafe Stamm": 7.5, "Bahngebühr": 30.0
-                }
-                self.kasse.kasse[key] = defaults[key]
-            ttk.Label(win, text=key).grid(row=row, column=0, padx=10, pady=5, sticky="w")
-            v = tk.StringVar(value=f"{self.kasse.kasse[key]:.2f}".replace(".", ","))
-            ttk.Entry(win, textvariable=v, width=10).grid(row=row, column=1, padx=10, pady=5, sticky="w")
-            vars_[key] = v
-            row += 1
-
-        def save():
-            for key, var in vars_.items():
-                try:
-                    value = float(var.get().replace(",", "."))
-                    if value < 0:
-                        messagebox.showerror("Fehler", f"Betrag für {key} kann nicht negativ sein.")
-                        return
-                    self.kasse.anpassen_gebuehren(key, value)
-                except ValueError:
-                    messagebox.showerror("Fehler", f"Ungültiger Betrag für {key}.")
-                    return
-            messagebox.showinfo("Gespeichert", "Kosten erfolgreich aktualisiert.")
-            win.destroy()
-
-        ttk.Button(win, text="Speichern", command=save).grid(row=row, column=0, columnspan=2, pady=10)
+        KostenEinstellungenWindow(self.root, self.kasse)
 
     def create_widgets(self):
         ttk.Button(self.root, text="Neues Spiel",      command=self.start_new_game).grid(row=0, column=0, pady=5)
