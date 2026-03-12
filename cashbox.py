@@ -6,7 +6,6 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from config import DATA_FILE_KASSE
 from storage import AtomicFileWriter
-from data_handler import DatenHandler
 
 
 # =============================================================================
@@ -86,8 +85,12 @@ class Kasse:
             return True
         return False
 
-    def einzahlung(self, betrag, beschreibung="Manuelle Einzahlung", spieler=None):
-        """Fügt Geld zur Kasse hinzu und speichert die Transaktion."""
+    def einzahlung(self, betrag, beschreibung="Manuelle Einzahlung"):
+        """Fügt Geld zur Kasse hinzu und speichert die Transaktion.
+
+        Hinweis: Das Reduzieren offener Spieler-Zahlungen obliegt dem Aufrufer
+        (DatenHandler.reduziere_ausstehende_zahlung), nicht der Kasse selbst.
+        """
         # FIX: Input-Validierung
         if betrag < 0:
             logging.warning(f"Negative Einzahlung verweigert: {betrag}")
@@ -114,9 +117,6 @@ class Kasse:
         self.kasse["Kassenstand"] += betrag
         self.kasse["Transaktionen"].append(f"{datum} | +{betrag:.2f}€: {beschreibung}")
 
-        if spieler:
-            self.reduziere_ausstehende_zahlung(spieler, betrag)
-
         self.speichere_kasse()
         return True
 
@@ -138,20 +138,6 @@ class Kasse:
             self.speichere_kasse()
             return True
         return False
-
-    def reduziere_ausstehende_zahlung(self, player, betrag):
-        try:
-            data = DatenHandler.laden_mitglieder()
-            if player in data["players"]:
-                schuld = data["players"][player].get("offene_zahlung", 0.0)
-                data["players"][player]["offene_zahlung"] = max(0.0, float(schuld) - float(betrag))
-                DatenHandler.speichern_mitglieder(data["players"])
-        except Exception as e:
-            logging.error(f"Reduzieren offene Zahlung fehlgeschlagen: {e}")
-
-    def zeige_ausstehende_beitraege(self, player):
-        data = DatenHandler.laden_mitglieder()
-        return float(data.get("players", {}).get(player, {}).get("offene_zahlung", 0.0))
 
     def get_kassenstand(self):
         return float(self.kasse["Kassenstand"])

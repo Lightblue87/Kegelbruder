@@ -29,7 +29,7 @@ class DatenHandler:
                         data = json.load(f)
                         # FIX: Validierung
                         if data is None:
-                            raise ValueError("Datei ist leer")
+                            raise ValueError("Datei enthält ungültige Daten (null)")
                         return data
                 except (json.JSONDecodeError, ValueError, IOError) as e:
                     logging.error(f"Fehler beim Lesen {path}: {e} – Backup erstellen")
@@ -72,6 +72,24 @@ class DatenHandler:
             AtomicFileWriter.atomic_write(AKTUELLES_SPIEL, data)
         except Exception as e:
             logging.error(f"Speichern aktuelles Spiel fehlgeschlagen: {e}")
+
+    @staticmethod
+    def reduziere_ausstehende_zahlung(player: str, betrag: float) -> bool:
+        """Reduziert die offene Zahlung eines Spielers in der Mitgliederdatei.
+
+        Gehört zur Persistenzschicht (hier), nicht zur Kassen-Fachlogik.
+        Gibt True zurück wenn erfolgreich, False bei Fehler.
+        """
+        try:
+            data = DatenHandler.laden_mitglieder()
+            if player in data["players"]:
+                schuld = data["players"][player].get("offene_zahlung", 0.0)
+                data["players"][player]["offene_zahlung"] = max(0.0, float(schuld) - float(betrag))
+                DatenHandler.speichern_mitglieder(data["players"])
+            return True
+        except Exception as e:
+            logging.error(f"Reduzieren offene Zahlung fehlgeschlagen ({player}): {e}")
+            return False
 
     @staticmethod
     def archivieren_spiel(spieldaten):
