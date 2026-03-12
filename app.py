@@ -12,7 +12,8 @@ Verantwortlichkeiten:
     gui/archive.py           → ArchiveWindow
     gui/player_management.py → PlayerManagementWindow
     gui/game_session.py      → GameSessionFrame
-                               (Punkteingabe, Sperre/Entsperre, Snapshot/Restore)
+                               (Punkteingabe, Sperre/Entsperre, Snapshot/Restore,
+                                Tab-/Fokus-Navigation)
 """
 
 import logging
@@ -356,40 +357,10 @@ class KegelBruederApp:
         self._game_session.load_runtime_snapshot()
 
     def _build_tab_order(self):
-        if not hasattr(self, "round_entries"):
-            return
-        self.tab_order   = []
-        self.entry_index = {}
-        idx = 0
-        for r in range(4):
-            if r >= len(self.round_entries):
-                break
-            for p in range(len(self.player_order)):
-                try:
-                    w = self.round_entries[r][p]
-                except IndexError:
-                    continue
-                if not w:
-                    continue
-                self.tab_order.append(w)
-                self.entry_index[w] = idx
-                w.bind("<Tab>",          self._on_tab_key)
-                w.bind("<ISO_Left_Tab>", self._on_shift_tab_key)
-                w.bind("<Shift-Tab>",    self._on_shift_tab_key)
-                idx += 1
+        self._game_session.build_tab_order()
 
     def _on_tab_key(self, event):
-        if not getattr(self, "tab_order", None):
-            return
-        i   = self.entry_index.get(event.widget, 0)
-        nxt = (i + 1) % len(self.tab_order)
-        self.tab_order[nxt].focus_set()
-        return "break"
+        return self._game_session._on_tab_key(event)
 
     def _on_shift_tab_key(self, event):
-        if not getattr(self, "tab_order", None):
-            return
-        i   = self.entry_index.get(event.widget, 0)
-        prv = (i - 1) % len(self.tab_order)
-        self.tab_order[prv].focus_set()
-        return "break"
+        return self._game_session._on_shift_tab_key(event)

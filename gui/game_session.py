@@ -8,12 +8,14 @@ Kapselt:
   - Snapshot speichern                     (save_runtime_snapshot)
   - Snapshot laden und Felder befüllen     (load_runtime_snapshot)
   - Inhalt eines Snapshots prüfen          (_snapshot_has_content)
+  - Tab-Reihenfolge aufbauen               (build_tab_order)
+  - Tab-/Shift-Tab-Navigation              (_on_tab_key / _on_shift_tab_key)
 
-Tab-/Fokus-Logik und Summenberechnung bleiben ausdrücklich in app.py.
+Summenberechnung (update_sum) bleibt ausdrücklich in app.py.
 
 Widget-Referenzen (punkte_entries, zusatzfelder, arrow_buttons, round_entries,
 punkte_frame) werden nach rebuild() auf das app-Objekt zurückgeschrieben,
-damit der Tab-Code in app.py unverändert weiterläuft.
+damit bestehender Code in app.py unverändert weiterläuft.
 """
 
 import logging
@@ -33,6 +35,8 @@ class GameSessionFrame:
         self.zusatzfelder:   dict      = {}
         self.arrow_buttons:  dict      = {}
         self.round_entries:  list      = [[] for _ in range(4)]
+        self.tab_order:      list      = []
+        self.entry_index:    dict      = {}
 
     # ------------------------------------------------------------------
     def rebuild(self):
@@ -347,3 +351,50 @@ class GameSessionFrame:
             self.save_runtime_snapshot()
         except Exception as e:
             logging.error(f"Fehler beim Snapshot-Laden: {e}")
+
+    # ------------------------------------------------------------------
+    def build_tab_order(self):
+        """Baut die Tab-Reihenfolge für die Rundenfelder auf und registriert die Key-Bindings.
+
+        Muss nach rebuild() aufgerufen werden, da die Widgets erst dann existieren.
+        Bindings werden nur auf frisch erzeugten Widgets gesetzt; da rebuild() alle
+        alten Widgets zerstört, entstehen keine doppelten Bindings.
+        """
+        app = self.app
+        self.tab_order   = []
+        self.entry_index = {}
+        idx = 0
+        for r in range(4):
+            if r >= len(self.round_entries):
+                break
+            for p in range(len(app.player_order)):
+                try:
+                    w = self.round_entries[r][p]
+                except IndexError:
+                    continue
+                if not w:
+                    continue
+                self.tab_order.append(w)
+                self.entry_index[w] = idx
+                w.bind("<Tab>",          self._on_tab_key)
+                w.bind("<ISO_Left_Tab>", self._on_shift_tab_key)
+                w.bind("<Shift-Tab>",    self._on_shift_tab_key)
+                idx += 1
+
+    # ------------------------------------------------------------------
+    def _on_tab_key(self, event):
+        if not self.tab_order:
+            return
+        i   = self.entry_index.get(event.widget, 0)
+        nxt = (i + 1) % len(self.tab_order)
+        self.tab_order[nxt].focus_set()
+        return "break"
+
+    # ------------------------------------------------------------------
+    def _on_shift_tab_key(self, event):
+        if not self.tab_order:
+            return
+        i   = self.entry_index.get(event.widget, 0)
+        prv = (i - 1) % len(self.tab_order)
+        self.tab_order[prv].focus_set()
+        return "break"
