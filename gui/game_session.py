@@ -5,18 +5,22 @@ Kapselt:
   - Aufbau des Punkteingabe-Grids         (rebuild)
   - Sperren aller Eingabefelder            (sperre)
   - Entsperren aller Eingabefelder         (entsperre)
+  - Snapshot speichern                     (save_runtime_snapshot)
+  - Snapshot laden und Felder befüllen     (load_runtime_snapshot)
+  - Inhalt eines Snapshots prüfen          (_snapshot_has_content)
 
-Snapshot/Restore, Tab-/Fokus-Logik und Summenberechnung bleiben
-ausdrücklich in app.py, weil sie stark mit dem App-Zustand verflochten sind.
+Tab-/Fokus-Logik und Summenberechnung bleiben ausdrücklich in app.py.
 
 Widget-Referenzen (punkte_entries, zusatzfelder, arrow_buttons, round_entries,
 punkte_frame) werden nach rebuild() auf das app-Objekt zurückgeschrieben,
-damit der bestehende Snapshot/Tab-Code in app.py unverändert weiterläuft.
+damit der Tab-Code in app.py unverändert weiterläuft.
 """
 
 import logging
 import tkinter as tk
 from tkinter import messagebox, ttk
+
+from data_handler import DatenHandler
 
 
 class GameSessionFrame:
@@ -232,3 +236,114 @@ class GameSessionFrame:
                         self.zusatzfelder[player][feld] = tk.IntVar(value=0)
                     except Exception:
                         pass
+
+    # ------------------------------------------------------------------
+    def _snapshot_has_content(self, snap_players: dict) -> bool:
+        """Gibt True zurück, wenn snap_players mindestens einen nicht-leeren Wert enthält."""
+        for _, d in (snap_players or {}).items():
+            punkte = d.get("punkte", [])
+            if any(str(x).strip() not in ("", "0") for x in punkte):
+                return True
+            if d.get("pumpen", 0) or d.get("neuner", 0) or d.get("kranz", 0):
+                return True
+        return False
+
+    # ------------------------------------------------------------------
+    def save_runtime_snapshot(self):
+        """Liest die aktuellen Widget-Werte aus und speichert sie als Spiel-Snapshot."""
+        try:
+            app          = self.app
+            snap_players = {}
+            mit          = DatenHandler.laden_mitglieder().get("players", {})
+
+            for player, entry_list in self.punkte_entries.items():
+                runden = []
+                for e in entry_list[:-1]:
+                    try:
+                        val = e.get().strip()
+                        runden.append(int(val) if val else 0)
+                    except Exception:
+                        runden.append(0)
+
+                zf = self.zusatzfelder.get(player, {})
+                pu_var = zf.get("Pumpen")
+                nn_var = zf.get("Neuner")
+                kr_var = zf.get("Kranz")
+                pu = int(pu_var.get()) if pu_var is not None else 0
+                nn = int(nn_var.get()) if nn_var is not None else 0
+                kr = int(kr_var.get()) if kr_var is not None else 0
+
+                pdata = mit.get(player, {})
+                typ   = pdata.get("typ",   app.players.get(player, {}).get("typ",   "Stamm"))
+                offen = float(pdata.get("offene_zahlung",
+                              app.players.get(player, {}).get("offene_zahlung", 0.0)))
+
+                snap_players[player] = {
+                    "typ":            typ,
+                    "punkte":         runden[:4] if len(runden) >= 4 else [0, 0, 0, 0],
+                    "offene_zahlung": offen,
+                    "pumpen":         pu,
+                    "neuner":         nn,
+                    "kranz":          kr,
+                }
+
+            if snap_players and self._snapshot_has_content(snap_players):
+                DatenHandler.speichern_spiel({
+                    "players": snap_players, "runde": 1, "abgerechnet": False
+                })
+            else:
+                DatenHandler.speichern_spiel({"players": {}, "runde": 0, "abgerechnet": False})
+        except Exception as e:
+            logging.error(f"Fehler beim Snapshot-Speichern: {e}")
+
+    # ------------------------------------------------------------------
+    def load_runtime_snapshot(self):
+        """Lädt den gespeicherten Spiel-Snapshot und befüllt die Widgets."""
+        try:
+            app  = self.app
+            snap = DatenHandler.laden_spiel()
+            if not snap or snap.get("abgerechnet"):
+                return
+            snap_players = snap.get("players", {})
+            if not snap_players:
+                return
+
+            mit          = DatenHandler.laden_mitglieder().get("players", {})
+            app.players  = {}
+            for name, d in snap_players.items():
+                base = mit.get(name, {})
+                app.players[name] = {
+                    "typ":            base.get("typ", d.get("typ", "Stamm")),
+                    "punkte":         d.get("punkte", [0, 0, 0, 0]),
+                    "offene_zahlung": float(base.get("offene_zahlung",
+                                           d.get("offene_zahlung", 0.0))),
+                }
+
+            app.create_punkteingabe()
+
+            for name, d in snap_players.items():
+                punkte = d.get("punkte", [0, 0, 0, 0])[:4]
+                if name in self.punkte_entries:
+                    for i in range(4):
+                        try:
+                            self.punkte_entries[name][i].delete(0, tk.END)
+                            self.punkte_entries[name][i].insert(0, str(punkte[i]))
+                        except Exception:
+                            pass
+                    try:
+                        self.punkte_entries[name][-1].config(text=str(sum(punkte)))
+                    except Exception:
+                        pass
+
+                zf = self.zusatzfelder.get(name, {})
+                for feld, key in (("Pumpen", "pumpen"), ("Neuner", "neuner"), ("Kranz", "kranz")):
+                    var = zf.get(feld)
+                    if var is not None:
+                        try:
+                            var.set(int(d.get(key, 0)))
+                        except Exception:
+                            pass
+
+            self.save_runtime_snapshot()
+        except Exception as e:
+            logging.error(f"Fehler beim Snapshot-Laden: {e}")

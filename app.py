@@ -3,7 +3,7 @@ app.py – KegelBruederApp (Hauptklasse / Koordinator)
 
 Verantwortlichkeiten:
 - Hauptfenster aufbauen (Menü, Toolbar, Punkteingabe-Grid)
-- Spielstart, Abort, Snapshot, Restore
+- Spielstart, Abort
 - Session-Buchungen (Rollback-fähig)
 - Delegation der GUI-Bereiche an gui/ Module:
     gui/attendance.py        → AttendanceFlow
@@ -12,6 +12,7 @@ Verantwortlichkeiten:
     gui/archive.py           → ArchiveWindow
     gui/player_management.py → PlayerManagementWindow
     gui/game_session.py      → GameSessionFrame
+                               (Punkteingabe, Sperre/Entsperre, Snapshot/Restore)
 """
 
 import logging
@@ -346,110 +347,13 @@ class KegelBruederApp:
         self.root.destroy()
 
     def _snapshot_has_content(self, snap_players: dict) -> bool:
-        for p, d in (snap_players or {}).items():
-            punkte = d.get("punkte", [])
-            if any(str(x).strip() not in ("", "0") for x in punkte):
-                return True
-            if d.get("pumpen", 0) or d.get("neuner", 0) or d.get("kranz", 0):
-                return True
-        return False
+        return self._game_session._snapshot_has_content(snap_players)
 
     def save_runtime_snapshot(self):
-        try:
-            snap_players = {}
-            mit = DatenHandler.laden_mitglieder().get("players", {})
-
-            for player, entry_list in self.punkte_entries.items():
-                runden = []
-                for e in entry_list[:-1]:
-                    try:
-                        val = e.get().strip()
-                        runden.append(int(val) if val else 0)
-                    except Exception:
-                        runden.append(0)
-
-                if player not in self.zusatzfelder:
-                    pu = nn = kr = 0
-                else:
-                    pu = int(self.zusatzfelder[player].get("Pumpen", tk.IntVar(value=0)).get())
-                    nn = int(self.zusatzfelder[player].get("Neuner", tk.IntVar(value=0)).get())
-                    kr = int(self.zusatzfelder[player].get("Kranz",  tk.IntVar(value=0)).get())
-
-                pdata = mit.get(player, {})
-                typ   = pdata.get("typ",   self.players.get(player, {}).get("typ",   "Stamm"))
-                offen = float(pdata.get("offene_zahlung",
-                              self.players.get(player, {}).get("offene_zahlung", 0.0)))
-
-                snap_players[player] = {
-                    "typ":            typ,
-                    "punkte":         runden[:4] if len(runden) >= 4 else [0, 0, 0, 0],
-                    "offene_zahlung": offen,
-                    "pumpen":         pu,
-                    "neuner":         nn,
-                    "kranz":          kr,
-                }
-
-            if snap_players and self._snapshot_has_content(snap_players):
-                DatenHandler.speichern_spiel({
-                    "players": snap_players, "runde": 1, "abgerechnet": False
-                })
-            else:
-                DatenHandler.speichern_spiel({"players": {}, "runde": 0, "abgerechnet": False})
-        except Exception as e:
-            logging.error(f"Fehler beim Snapshot-Speichern: {e}")
+        self._game_session.save_runtime_snapshot()
 
     def load_runtime_snapshot(self):
-        try:
-            snap = DatenHandler.laden_spiel()
-            if not snap or snap.get("abgerechnet"):
-                return
-            snap_players = snap.get("players", {})
-            if not snap_players:
-                return
-
-            mit = DatenHandler.laden_mitglieder().get("players", {})
-            self.players = {}
-            for name, d in snap_players.items():
-                base = mit.get(name, {})
-                self.players[name] = {
-                    "typ":            base.get("typ", d.get("typ", "Stamm")),
-                    "punkte":         d.get("punkte", [0, 0, 0, 0]),
-                    "offene_zahlung": float(base.get("offene_zahlung", d.get("offene_zahlung", 0.0))),
-                }
-
-            self.create_punkteingabe()
-
-            for name, d in snap_players.items():
-                punkte = d.get("punkte", [0, 0, 0, 0])[:4]
-                if name in self.punkte_entries:
-                    for i in range(4):
-                        try:
-                            self.punkte_entries[name][i].delete(0, tk.END)
-                            self.punkte_entries[name][i].insert(0, str(punkte[i]))
-                        except Exception:
-                            pass
-                    try:
-                        self.punkte_entries[name][-1].config(text=str(sum(punkte)))
-                    except Exception:
-                        pass
-
-                if name in self.zusatzfelder:
-                    try:
-                        self.zusatzfelder[name]["Pumpen"].set(int(d.get("pumpen", 0)))
-                    except Exception:
-                        pass
-                    try:
-                        self.zusatzfelder[name]["Neuner"].set(int(d.get("neuner", 0)))
-                    except Exception:
-                        pass
-                    try:
-                        self.zusatzfelder[name]["Kranz"].set(int(d.get("kranz", 0)))
-                    except Exception:
-                        pass
-
-            self.save_runtime_snapshot()
-        except Exception as e:
-            logging.error(f"Fehler beim Snapshot-Laden: {e}")
+        self._game_session.load_runtime_snapshot()
 
     def _build_tab_order(self):
         if not hasattr(self, "round_entries"):
