@@ -171,7 +171,8 @@ class KegelBruederApp:
     def update_sum(self, player):
         try:
             punkte = [e.get().strip() for e in self.punkte_entries[player][:-1]]
-            if all(p.isdigit() for p in punkte if p != "") and len([p for p in punkte if p != ""]) == 4:
+            filled = [p for p in punkte if p != ""]
+            if len(filled) == 4 and all(p.isdigit() for p in filled):
                 values = list(map(int, punkte))
                 self.punkte_entries[player][-1].config(text=str(sum(values)))
                 self.players[player]["punkte"] = values
