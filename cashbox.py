@@ -26,13 +26,17 @@ class Kasse:
         self.lade_kasse()
 
     def get_bahngebuehr(self) -> float:
-        """Robuster Zugriff – unterstützt auch alte Schlüssel/Schreibweisen."""
-        return float(
-            self.kasse.get("Bahngebühr")
-            or self.kasse.get("Bahngebuehr")
-            or self.kasse.get("Bahngeb\u00fchr")
-            or 0
-        )
+        """Robuster Zugriff auf die Bahngebühr – unterstützt auch ältere Schlüsselschreibweise.
+
+        Verwendet explizite key-Existenzprüfung (is not None), damit ein gültiger Wert 0.0
+        nicht fälschlich als „nicht vorhanden" behandelt wird.
+        Geprüfte Schlüssel: 'Bahngebühr' (aktuell) und 'Bahngebuehr' (alt, ohne Umlaut).
+        """
+        for key in ("Bahngebühr", "Bahngebuehr"):
+            val = self.kasse.get(key)
+            if val is not None:
+                return float(val)
+        return 0.0
 
     def lade_kasse(self):
         if os.path.exists(DATA_FILE_KASSE):
@@ -120,24 +124,29 @@ class Kasse:
         self.speichere_kasse()
         return True
 
-    def auszahlung(self, betrag, beschreibung="Manuelle Auszahlung"):
+    def auszahlung(self, betrag, beschreibung="Manuelle Auszahlung", force=False):
         # FIX: Input-Validierung
         if betrag < 0:
             logging.warning(f"Negative Auszahlung verweigert: {betrag}")
             return False
 
-        if 0 < betrag <= self.kasse["Kassenstand"]:
-            datum = datetime.now().strftime("%d.%m.%Y")
+        if betrag <= 0:
+            return False
 
-            # FIX #8: Decimal-Arithmetik
-            betrag_decimal = Decimal(str(betrag)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-            betrag = float(betrag_decimal)
+        # Ohne force: Kassenstand darf nicht überzogen werden
+        if not force and betrag > self.kasse["Kassenstand"]:
+            return False
 
-            self.kasse["Kassenstand"] -= betrag
-            self.kasse["Transaktionen"].append(f"{datum} | -{betrag:.2f}€: {beschreibung}")
-            self.speichere_kasse()
-            return True
-        return False
+        datum = datetime.now().strftime("%d.%m.%Y")
+
+        # FIX #8: Decimal-Arithmetik
+        betrag_decimal = Decimal(str(betrag)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        betrag = float(betrag_decimal)
+
+        self.kasse["Kassenstand"] -= betrag
+        self.kasse["Transaktionen"].append(f"{datum} | -{betrag:.2f}€: {beschreibung}")
+        self.speichere_kasse()
+        return True
 
     def get_kassenstand(self):
         return float(self.kasse["Kassenstand"])

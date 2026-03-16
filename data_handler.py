@@ -17,7 +17,7 @@ from storage import AtomicFileWriter
 # Datenzugriff
 # =============================================================================
 class DatenHandler:
-    _file_lock = threading.Lock()  # FIX #7: Thread-Sicherheit
+    _file_lock = threading.RLock()  # RLock erlaubt re-entrante Aufrufe im selben Thread
 
     @staticmethod
     def _safe_read_json(path, default):
@@ -49,11 +49,12 @@ class DatenHandler:
 
     @staticmethod
     def speichern_mitglieder(players):
-        try:
-            data = {"players": players}
-            AtomicFileWriter.atomic_write(MITGLIEDER_DATEI, data)
-        except Exception as e:
-            logging.error(f"Speichern Mitglieder fehlgeschlagen: {e}")
+        with DatenHandler._file_lock:
+            try:
+                data = {"players": players}
+                AtomicFileWriter.atomic_write(MITGLIEDER_DATEI, data)
+            except Exception as e:
+                logging.error(f"Speichern Mitglieder fehlgeschlagen: {e}")
 
     @staticmethod
     def laden():
@@ -68,10 +69,11 @@ class DatenHandler:
 
     @staticmethod
     def speichern_spiel(data):
-        try:
-            AtomicFileWriter.atomic_write(AKTUELLES_SPIEL, data)
-        except Exception as e:
-            logging.error(f"Speichern aktuelles Spiel fehlgeschlagen: {e}")
+        with DatenHandler._file_lock:
+            try:
+                AtomicFileWriter.atomic_write(AKTUELLES_SPIEL, data)
+            except Exception as e:
+                logging.error(f"Speichern aktuelles Spiel fehlgeschlagen: {e}")
 
     @staticmethod
     def reduziere_ausstehende_zahlung(player: str, betrag: float) -> bool:
@@ -80,30 +82,32 @@ class DatenHandler:
         Gehört zur Persistenzschicht (hier), nicht zur Kassen-Fachlogik.
         Gibt True zurück wenn erfolgreich, False bei Fehler.
         """
-        try:
-            data = DatenHandler.laden_mitglieder()
-            if player in data["players"]:
-                schuld = data["players"][player].get("offene_zahlung", 0.0)
-                data["players"][player]["offene_zahlung"] = max(0.0, float(schuld) - float(betrag))
-                DatenHandler.speichern_mitglieder(data["players"])
-            return True
-        except Exception as e:
-            logging.error(f"Reduzieren offene Zahlung fehlgeschlagen ({player}): {e}")
-            return False
+        with DatenHandler._file_lock:
+            try:
+                data = DatenHandler.laden_mitglieder()
+                if player in data["players"]:
+                    schuld = data["players"][player].get("offene_zahlung", 0.0)
+                    data["players"][player]["offene_zahlung"] = max(0.0, float(schuld) - float(betrag))
+                    DatenHandler.speichern_mitglieder(data["players"])
+                return True
+            except Exception as e:
+                logging.error(f"Reduzieren offene Zahlung fehlgeschlagen ({player}): {e}")
+                return False
 
     @staticmethod
     def archivieren_spiel(spieldaten):
-        historie = DatenHandler._safe_read_json(HISTORIE_FILE, [])
-        if "spieler_reihenfolge" not in spieldaten and "players" in spieldaten:
-            spieldaten["spieler_reihenfolge"] = list(spieldaten["players"].keys())
-        historie.append(spieldaten)
+        with DatenHandler._file_lock:
+            historie = DatenHandler._safe_read_json(HISTORIE_FILE, [])
+            if "spieler_reihenfolge" not in spieldaten and "players" in spieldaten:
+                spieldaten["spieler_reihenfolge"] = list(spieldaten["players"].keys())
+            historie.append(spieldaten)
 
-        # FIX: Begrenzen auf letzte 100 Spiele (Performance)
-        if len(historie) > 100:
-            historie = historie[-100:]
-            logging.warning("Historie auf letzte 100 Spiele begrenzt")
+            # FIX: Begrenzen auf letzte 100 Spiele (Performance)
+            if len(historie) > 100:
+                historie = historie[-100:]
+                logging.warning("Historie auf letzte 100 Spiele begrenzt")
 
-        try:
-            AtomicFileWriter.atomic_write(HISTORIE_FILE, historie)
-        except Exception as e:
-            logging.error(f"Speichern Historie fehlgeschlagen: {e}")
+            try:
+                AtomicFileWriter.atomic_write(HISTORIE_FILE, historie)
+            except Exception as e:
+                logging.error(f"Speichern Historie fehlgeschlagen: {e}")

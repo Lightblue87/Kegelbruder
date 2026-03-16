@@ -20,6 +20,7 @@ Verantwortlichkeiten:
 import logging
 import tkinter as tk
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 from tkinter import messagebox, ttk
 
 from cashbox import Kasse
@@ -207,6 +208,8 @@ class KegelBruederApp:
     def _session_einzahlung(self, betrag: float, beschreibung: str, spieler=None):
         if betrag <= 0:
             return
+        # Vorab quantisieren, damit Transaktionsstring und Kassenlogik denselben Wert verwenden
+        betrag = float(Decimal(str(betrag)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
         ok = self.kasse.einzahlung(betrag, beschreibung)
         if not ok:
             return
@@ -216,10 +219,12 @@ class KegelBruederApp:
         entry_plus = f"{datum} | +{betrag:.2f}€: {beschreibung}"
         self._session_tx.append(("einzahlung", betrag, entry_plus))
 
-    def _session_auszahlung(self, betrag: float, beschreibung: str):
+    def _session_auszahlung(self, betrag: float, beschreibung: str, force: bool = False):
         if betrag <= 0:
             return
-        ok = self.kasse.auszahlung(betrag, beschreibung)
+        # Vorab quantisieren, damit Transaktionsstring und Kassenlogik denselben Wert verwenden
+        betrag = float(Decimal(str(betrag)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+        ok = self.kasse.auszahlung(betrag, beschreibung, force=force)
         if not ok:
             return
         datum       = datetime.now().strftime("%d.%m.%Y")
@@ -235,6 +240,7 @@ class KegelBruederApp:
             return
 
         self.entsperre_spielfelder()
+        self.abrechnung_button.config(state="normal")
 
         mit = DatenHandler.laden_mitglieder().get("players", {})
         if not mit:

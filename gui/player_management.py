@@ -140,6 +140,13 @@ class PlayerManagementWindow:
                 new_typ  = typ_var.get()
                 if not new_name:
                     return
+                if new_name != selected and new_name in mit["players"]:
+                    messagebox.showerror(
+                        "Fehler",
+                        f"Ein Spieler mit dem Namen '{new_name}' existiert bereits.\n"
+                        "Bitte einen anderen Namen wählen."
+                    )
+                    return
                 if new_name != selected:
                     mit["players"][new_name] = mit["players"].pop(selected)
                 mit["players"][new_name]["typ"] = new_typ

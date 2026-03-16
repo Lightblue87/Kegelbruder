@@ -203,10 +203,10 @@ class BillingWindow:
                 self.app._session_einzahlung(spende, f"{datum} - Spende von {player}")
                 gesamt_spenden += spende
 
-        # FIX: get_bahngebuehr() statt manueller key-Suche mit zwei Varianten
+        # Bahngebühr immer buchen (force=True), auch wenn Kassenstand < Bahngebühr
         bahn = self.app.kasse.get_bahngebuehr()
         if bahn > 0:
-            self.app._session_auszahlung(bahn, f"{datum} - Bahngebühr")
+            self.app._session_auszahlung(bahn, f"{datum} - Bahngebühr", force=True)
 
         info_summe = round(gesamt_strafen + gesamt_spenden + startgeld_info, 2)
         if info_summe > 0:
@@ -232,7 +232,10 @@ class BillingWindow:
             "Alle Felder gesperrt – starte ein neues Spiel, um fortzufahren."
         )
 
-        DatenHandler.speichern_spiel({"players": {}, "runde": 1})
+        # Spielstand ist bereits archiviert; das Spiel wird mit leerem Zustand abgeschlossen,
+        # damit kein halbfertiges Spiel beim nächsten Start wiederhergestellt wird.
+        DatenHandler.speichern_spiel({"players": {}, "runde": 1, "abgerechnet": True})
+        self.app.abrechnung_button.config(state="disabled")
         if self.win and self.win.winfo_exists():
             self.win.destroy()
 
