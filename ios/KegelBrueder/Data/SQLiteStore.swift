@@ -413,9 +413,8 @@ final class SQLiteStore {
 
     struct Row {
         let stmt: OpaquePointer
-        func text(_ col: Int32) -> String { String(cString: sqlite3_column_text(stmt, col)) }
-        func text(_ col: Int32) -> String? {
-            guard let p = sqlite3_column_text(stmt, col) else { return nil }
+        func text(_ col: Int32) -> String {
+            guard let p = sqlite3_column_text(stmt, col) else { return "" }
             return String(cString: p)
         }
         func real(_ col: Int32) -> Double { sqlite3_column_double(stmt, col) }
