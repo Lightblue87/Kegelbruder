@@ -69,13 +69,6 @@ struct ContentView: View {
                     } label: {
                         Label("Kosten Einstellungen", systemImage: "gearshape")
                     }
-
-                    Button {
-                        store.folderURL = nil
-                        UserDefaults.standard.removeObject(forKey: "dataFolderBookmark")
-                    } label: {
-                        Label("Ordner ändern", systemImage: "folder.badge.gear")
-                    }
                 }
             }
             .navigationTitle("Kegel Brüder")

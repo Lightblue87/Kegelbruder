@@ -2,18 +2,18 @@ import SwiftUI
 
 @main
 struct KegelBruederApp: App {
-    @StateObject private var vm = AppViewModel()
+    @StateObject private var vm    = AppViewModel()
     @StateObject private var store = DataStore.shared
-    @StateObject private var sync = SyncManager.shared
+    @StateObject private var sync  = SyncManager.shared
 
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
             Group {
-                if store.folderURL == nil && !sync.hasLink {
-                    FolderPickerView()
-                        .environmentObject(store)
+                if !store.isReady {
+                    // iCloud container wird aufgelöst – kurzer Ladebildschirm
+                    iCloudLoadingView()
                 } else {
                     ContentView()
                         .environmentObject(vm)
@@ -34,31 +34,43 @@ struct KegelBruederApp: App {
             }
             .onAppear {
                 Task {
-                    // Beim Start: zuerst Daten von OneDrive laden, dann Lock prüfen
-                    if sync.hasLink {
-                        await sync.downloadAll()
-                    }
+                    await store.setUp()
+                    sync.startMonitoring()
                     vm.prüfeLockUndStarte { vm.laden() }
                 }
             }
             .onChange(of: scenePhase) { phase in
                 switch phase {
-                case .background:
-                    // Beim in den Hintergrund gehen: hochladen
-                    if sync.hasLink {
-                        Task { await sync.uploadAll(from: store) }
-                    }
                 case .active:
-                    // Beim Wiederkommen: herunterladen
-                    if sync.hasLink {
-                        Task {
-                            await sync.downloadAll()
-                            vm.laden()
-                        }
+                    if store.iCloudAvailable {
+                        store.reloadDatabase()
+                        vm.laden()
                     }
+                case .background:
+                    break // iCloud syncs automatically
                 default:
                     break
                 }
+            }
+        }
+    }
+}
+
+// MARK: - Loading screen while iCloud resolves
+
+private struct iCloudLoadingView: View {
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "figure.bowling")
+                .font(.system(size: 60))
+                .foregroundColor(.accentColor)
+            Text("Kegel Brüder")
+                .font(.largeTitle.bold())
+            HStack(spacing: 10) {
+                ProgressView()
+                Text("iCloud Drive wird verbunden…")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
             }
         }
     }

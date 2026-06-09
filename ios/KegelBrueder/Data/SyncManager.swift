@@ -1,88 +1,89 @@
 import Foundation
 import SwiftUI
 
-// MARK: - SyncManager: up/download kegelbruder.db via OneDrive Graph API
+// MARK: - SyncManager: monitors iCloud Drive sync status for kegelbruder.db
+// iCloud handles upload/download automatically – we only need to reload
+// the local SQLite connection when the file changes from another device.
 
 @MainActor
 class SyncManager: ObservableObject {
 
     static let shared = SyncManager()
 
-    private let oneDrive = OneDriveSyncService.shared
-    private let linkKey  = "oneDriveSharingLink"
-    private let dbFilename = "kegelbruder.db"
-
     @Published var status: SyncStatus = .idle
     @Published var lastSync: Date? = nil
-    @Published var sharingLink: String = ""
 
-    private init() {
-        sharingLink = UserDefaults.standard.string(forKey: linkKey) ?? ""
+    private var metadataQuery: NSMetadataQuery?
+    private var isMonitoring = false
+
+    private init() {}
+
+    // Backward-compat property (KegelBruederApp checks sync.hasLink)
+    var hasLink: Bool { DataStore.shared.iCloudAvailable }
+
+    // MARK: - Start iCloud file monitoring
+
+    func startMonitoring() {
+        guard DataStore.shared.iCloudAvailable, !isMonitoring else { return }
+        isMonitoring = true
+
+        let query = NSMetadataQuery()
+        query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
+        query.predicate = NSPredicate(
+            format: "%K == %@", NSMetadataItemFSNameKey, "kegelbruder.db"
+        )
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(queryDidUpdate),
+            name: .NSMetadataQueryDidUpdate,
+            object: query
+        )
+
+        query.start()
+        self.metadataQuery = query
     }
 
-    var hasLink: Bool { !sharingLink.trimmingCharacters(in: .whitespaces).isEmpty }
-
-    func setLink(_ link: String) {
-        sharingLink = link.trimmingCharacters(in: .whitespaces)
-        UserDefaults.standard.set(sharingLink, forKey: linkKey)
+    func stopMonitoring() {
+        metadataQuery?.stop()
+        metadataQuery = nil
+        isMonitoring = false
     }
 
-    func validateAndSaveLink(_ link: String) async -> Bool {
-        status = .syncing("Link wird geprüft…")
-        let ok = await oneDrive.validateLink(link)
-        if ok {
-            setLink(link)
-            status = .success("Link gespeichert ✓")
-        } else {
-            status = .error("Link ungültig oder kein Schreibzugriff")
+    @objc private func queryDidUpdate(notification: Notification) {
+        // Called when iCloud pushes an updated DB from another device
+        Task { @MainActor in
+            self.status = .syncing("iCloud synchronisiert…")
+            DataStore.shared.reloadDatabase()
+            self.lastSync = Date()
+            self.status = .success("Synchronisiert \(self.formatTime(Date()))")
         }
-        return ok
     }
 
-    // MARK: - Download DB from OneDrive → replace local DB
+    // MARK: - Manual refresh (user-triggered)
 
     func downloadAll() async {
-        guard hasLink else { status = .idle; return }
-        status = .syncing("Datenbank wird geladen…")
-        do {
-            let data = try await oneDrive.downloadFile(
-                sharingLink: sharingLink, filename: dbFilename
-            )
-            await DataStore.shared.replaceDatabase(with: data)
-            lastSync = Date()
-            status = .success("Synchronisiert \(formatTime(lastSync!))")
-        } catch SyncError.httpError(404, _) {
-            // DB existiert noch nicht in OneDrive – erster Start, kein Fehler
-            status = .idle
-        } catch {
-            status = .error("Download fehlgeschlagen: \(error.localizedDescription)")
+        guard DataStore.shared.iCloudAvailable else {
+            status = .error("iCloud nicht verfügbar")
+            return
         }
+        status = .syncing("Daten werden geladen…")
+        DataStore.shared.reloadDatabase()
+        lastSync = Date()
+        status = .success("Synchronisiert \(formatTime(Date()))")
     }
 
-    // MARK: - Upload local DB → OneDrive
+    // Legacy – no-op since iCloud uploads automatically
+    func uploadAll(from store: DataStore) async {}
+    func uploadFile(_ filename: String, data: Data) async {}
 
-    func uploadAll(from store: DataStore) async {
-        guard hasLink else { return }
-        guard let data = store.dbFileData() else { return }
-        status = .syncing("Datenbank wird hochgeladen…")
-        do {
-            try await oneDrive.uploadFile(
-                sharingLink: sharingLink, filename: dbFilename, data: data
-            )
-            lastSync = Date()
-            status = .success("Hochgeladen \(formatTime(lastSync!))")
-        } catch {
-            status = .error("Upload fehlgeschlagen: \(error.localizedDescription)")
-        }
-    }
+    // MARK: - Link validation (no longer needed – kept for backward compat)
 
-    // Einzeldatei-Upload (wird von DataStore.write() aufgerufen – jetzt ein No-op,
-    // da wir die ganze DB uploaden, nicht einzelne Dateien)
-    func uploadFile(_ filename: String, data: Data) async {
-        // Bei SQLite-basiertem Sync wird die ganze DB hochgeladen, nicht einzelne Dateien.
-        // Trigger: nach jeder Schreiboperation die DB hochladen.
-        await uploadAll(from: DataStore.shared)
-    }
+    func validateAndSaveLink(_ link: String) async -> Bool { false }
+    func setLink(_ link: String) {}
+    var sharingLink: String { "" }
+
+    // MARK: - Helper
 
     private func formatTime(_ date: Date) -> String {
         let f = DateFormatter(); f.dateFormat = "HH:mm"; return f.string(from: date)

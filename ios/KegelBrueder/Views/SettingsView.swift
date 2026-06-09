@@ -2,7 +2,8 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var vm: AppViewModel
-    @StateObject private var sync = SyncManager.shared
+    @StateObject private var sync  = SyncManager.shared
+    @StateObject private var store = DataStore.shared
 
     @State private var startgeld: String = ""
     @State private var pumpe: String = ""
@@ -12,73 +13,56 @@ struct SettingsView: View {
     @State private var bahngebuehr: String = ""
     @State private var saved = false
 
-    @State private var linkInput: String = ""
-    @State private var isValidating = false
-    @State private var linkSaved = false
-    @State private var linkError: String? = nil
-
     var body: some View {
         Form {
-            // OneDrive Sync Section
+            // iCloud Sync Section
             Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    // Status
-                    HStack(spacing: 8) {
-                        if sync.status.isLoading {
-                            ProgressView().scaleEffect(0.8)
-                        } else {
-                            Image(systemName: syncStatusIcon)
-                                .foregroundColor(syncStatusColor)
+                HStack(spacing: 10) {
+                    if sync.status.isLoading {
+                        ProgressView().scaleEffect(0.85)
+                    } else {
+                        Image(systemName: store.iCloudAvailable ? "checkmark.icloud.fill" : "xmark.icloud.fill")
+                            .foregroundColor(store.iCloudAvailable ? .kbSuccess : .kbDanger)
+                            .font(.title2)
+                    }
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(store.iCloudAvailable ? "iCloud Drive aktiv" : "iCloud nicht verfügbar")
+                            .font(.subheadline.bold())
+                        if sync.status != .idle {
+                            Text(sync.status.message)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        } else if let last = sync.lastSync {
+                            Text("Zuletzt: \(formatLastSync(last))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
                         }
-                        Text(sync.status == .idle ? (sync.hasLink ? "Verbunden" : "Kein Link") : sync.status.message)
-                            .font(.subheadline)
-                            .foregroundColor(syncStatusColor)
                     }
-
-                    TextField("https://1drv.ms/f/s!A...", text: $linkInput)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .font(.caption)
-
-                    if let err = linkError {
-                        Text(err).font(.caption).foregroundColor(.red)
-                    }
-
-                    HStack(spacing: 12) {
+                    Spacer()
+                    if store.iCloudAvailable {
                         Button {
-                            Task { await speichereLink() }
+                            Task { await sync.downloadAll(); vm.laden() }
                         } label: {
-                            if isValidating {
-                                ProgressView().scaleEffect(0.8)
-                            } else {
-                                Text(linkSaved ? "Gespeichert ✓" : "Link speichern")
-                            }
+                            Image(systemName: "arrow.clockwise")
                         }
-                        .disabled(linkInput.isEmpty || isValidating)
-                        .buttonStyle(.bordered)
-                        .tint(linkSaved ? .kbSuccess : .kbPrimary)
-
-                        Button {
-                            Task { await sync.downloadAll() }
-                        } label: {
-                            Label("Jetzt sync", systemImage: "arrow.clockwise")
-                        }
-                        .disabled(!sync.hasLink || sync.status.isLoading)
-                        .buttonStyle(.bordered)
-                    }
-
-                    if let last = sync.lastSync {
-                        Text("Letzter Sync: \(formatLastSync(last))")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+                        .disabled(sync.status.isLoading)
                     }
                 }
                 .padding(.vertical, 4)
+
+                if !store.iCloudAvailable {
+                    Text("Öffne Einstellungen → [Dein Name] → iCloud und aktiviere iCloud Drive. Melde dich mit derselben Apple ID an wie auf dem Mac.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
             } header: {
-                Label("OneDrive Synchronisation", systemImage: "cloud")
+                Label("iCloud Drive Synchronisation", systemImage: "icloud")
             } footer: {
-                Text("Freigabelink mit 'Jeder mit dem Link kann bearbeiten'. Internet wird nur zum Sync benötigt.")
+                if store.iCloudAvailable {
+                    Text("Mac-Pfad für Desktop-App:\n~/Library/Mobile Documents/iCloud~de~kegelbruder~app/Documents/kegelbruder.db")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
             }
 
             Section("Gebühren") {
@@ -109,42 +93,7 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Kosten Einstellungen")
-        .onAppear {
-            laden()
-            linkInput = sync.sharingLink
-        }
-    }
-
-    private var syncStatusIcon: String {
-        switch sync.status {
-        case .idle:    return sync.hasLink ? "checkmark.circle" : "xmark.circle"
-        case .syncing: return "arrow.clockwise"
-        case .success: return "checkmark.circle.fill"
-        case .error:   return "exclamationmark.triangle.fill"
-        }
-    }
-
-    private var syncStatusColor: Color {
-        switch sync.status {
-        case .idle:    return sync.hasLink ? .kbSuccess : .kbTextSecondary
-        case .syncing: return .kbPrimary
-        case .success: return .kbSuccess
-        case .error:   return .kbDanger
-        }
-    }
-
-    private func speichereLink() async {
-        isValidating = true
-        linkError = nil
-        linkSaved = false
-        let ok = await sync.validateAndSaveLink(linkInput)
-        isValidating = false
-        if ok {
-            linkSaved = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { linkSaved = false }
-        } else {
-            linkError = "Link ungültig oder kein Schreibzugriff"
-        }
+        .onAppear { laden() }
     }
 
     private func formatLastSync(_ date: Date) -> String {

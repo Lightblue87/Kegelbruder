@@ -1,103 +1,63 @@
 import Foundation
 import UIKit
 
-// MARK: - DataStore: manages the local SQLite DB cache + folder bookmark
+// MARK: - DataStore: manages the SQLite DB via iCloud Drive ubiquity container
+// Falls back to local Documents if iCloud is not available.
 
 @MainActor
 class DataStore: ObservableObject {
 
     static let shared = DataStore()
 
-    private let bookmarkKey = "dataFolderBookmark"
-    private let dbFilename  = "kegelbruder.db"
+    private let dbFilename       = "kegelbruder.db"
+    private let containerID      = "iCloud.de.kegelbruder.app"
 
-    @Published var folderURL: URL? = nil
-    @Published var folderName: String = ""
+    @Published var isReady:         Bool = false
+    @Published var iCloudAvailable: Bool = false
+    @Published var dbPath:          String = ""
 
     private(set) var sqlite: SQLiteStore? = nil
 
-    private init() {
-        restoreBookmark()
+    // Computed for backward compatibility with code that checks folderURL != nil
+    var folderURL: URL? {
+        sqlite.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent() }
     }
 
-    // MARK: - Folder selection & bookmark
+    private init() {}
 
-    func saveBookmark(for url: URL) {
-        guard url.startAccessingSecurityScopedResource() else { return }
-        defer { url.stopAccessingSecurityScopedResource() }
-        do {
-            let bookmark = try url.bookmarkData(
-                options: .minimalBookmark,
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            )
-            UserDefaults.standard.set(bookmark, forKey: bookmarkKey)
-            folderURL = url
-            folderName = url.lastPathComponent
-            openDatabase(in: url)
-        } catch {
-            print("Bookmark speichern fehlgeschlagen: \(error)")
-        }
-    }
+    // MARK: - Startup: resolve iCloud container URL (must run async, blocks main thread otherwise)
 
-    func restoreBookmark() {
-        guard let data = UserDefaults.standard.data(forKey: bookmarkKey) else { return }
-        var isStale = false
-        do {
-            let url = try URL(
-                resolvingBookmarkData: data,
-                options: [],
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            )
-            if isStale { saveBookmark(for: url) } else {
-                folderURL = url
-                folderName = url.lastPathComponent
-                openDatabase(in: url)
+    func setUp() async {
+        let (dbURL, cloudAvailable) = await Task.detached(priority: .userInitiated) { [self] in
+            if let container = FileManager.default.url(
+                forUbiquityContainerIdentifier: self.containerID
+            ) {
+                let docs = container.appendingPathComponent("Documents")
+                try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+                return (docs.appendingPathComponent(self.dbFilename), true)
+            } else {
+                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                return (docs.appendingPathComponent(self.dbFilename), false)
             }
-        } catch {
-            print("Bookmark wiederherstellen fehlgeschlagen: \(error)")
-        }
+        }.value
+
+        openDatabase(at: dbURL)
+        iCloudAvailable = cloudAvailable
+        dbPath          = dbURL.path
+        isReady         = true
     }
 
-    private func openDatabase(in folder: URL) {
-        guard folder.startAccessingSecurityScopedResource() else { return }
-        defer { folder.stopAccessingSecurityScopedResource() }
-        let dbURL = folder.appendingPathComponent(dbFilename)
-        do {
-            sqlite = try SQLiteStore(path: dbURL.path)
-        } catch {
-            print("SQLite öffnen fehlgeschlagen: \(error)")
-        }
-    }
-
-    // MARK: - DB file URL (for OneDrive upload/download)
-
-    func dbFileURL() -> URL? {
-        folderURL?.appendingPathComponent(dbFilename)
-    }
-
-    func dbFileData() -> Data? {
-        guard let url = dbFileURL(),
-              let folder = folderURL,
-              folder.startAccessingSecurityScopedResource() else { return nil }
-        defer { folder.stopAccessingSecurityScopedResource() }
-        return try? Data(contentsOf: url)
-    }
-
-    func replaceDatabase(with data: Data) {
-        guard let url = dbFileURL(),
-              let folder = folderURL,
-              folder.startAccessingSecurityScopedResource() else { return }
-        defer { folder.stopAccessingSecurityScopedResource() }
-
-        // Close current connection, replace file, reopen
+    func reloadDatabase() {
+        guard let path = sqlite?.path else { return }
         sqlite = nil
+        openDatabase(at: URL(fileURLWithPath: path))
+    }
+
+    private func openDatabase(at url: URL) {
         do {
-            try data.write(to: url, options: .atomic)
             sqlite = try SQLiteStore(path: url.path)
         } catch {
-            print("Datenbank ersetzen fehlgeschlagen: \(error)")
+            print("SQLite öffnen fehlgeschlagen: \(error)")
         }
     }
 
@@ -157,7 +117,7 @@ class DataStore: ObservableObject {
     }
 
     func speichereHistorie(_ entries: [HistorieEntry]) {
-        // Historie ist append-only – einzelne Einträge werden via archivierSpiel() geschrieben
+        // append-only – einzelne Einträge via archivierSpiel()
     }
 
     func archivierSpiel(datum: String, players: [String: PlayerData],
@@ -166,7 +126,7 @@ class DataStore: ObservableObject {
                                     transaktionen: transaktionen, reihenfolge: reihenfolge)
     }
 
-    // MARK: - Lock (via SQLite app_lock table)
+    // MARK: - Lock
 
     func ladeLock() -> AppLockFile? {
         sqlite?.ladeLock()
@@ -188,8 +148,8 @@ class DataStore: ObservableObject {
     func lockIstAbgelaufen(_ lock: AppLockFile) -> Bool {
         let formatter = ISO8601DateFormatter()
         guard let seit = formatter.date(from: lock.seit) else { return true }
-        let calendar = Calendar.current
-        let jetzt = Date()
+        let calendar  = Calendar.current
+        let jetzt     = Date()
         var components = calendar.dateComponents([.year, .month, .day], from: jetzt)
         components.hour = 1; components.minute = 0; components.second = 0
         guard let resetHeute = calendar.date(from: components) else { return true }
@@ -199,9 +159,12 @@ class DataStore: ObservableObject {
         return seit < letzterReset
     }
 
-    // MARK: - Misc
+    // MARK: - Misc (kept for SyncManager compatibility)
 
-    func write<T: Encodable>(_ filename: String, value: T) {
-        // Kept for SyncManager compatibility; actual data goes through typed methods above
+    func write<T: Encodable>(_ filename: String, value: T) {}
+
+    func dbFileData() -> Data? {
+        guard let path = sqlite?.path else { return nil }
+        return try? Data(contentsOf: URL(fileURLWithPath: path))
     }
 }
