@@ -94,6 +94,13 @@ class DataStore: ObservableObject {
             let tempURL = folder.appendingPathComponent("\(filename).tmp")
             try data.write(to: tempURL, options: .atomic)
             _ = try? FileManager.default.replaceItemAt(url, withItemAt: tempURL)
+
+            // Auto-upload to OneDrive if link configured
+            if filename != "kegelbruder.lock" {
+                Task {
+                    await SyncManager.shared.uploadFile(filename, data: data)
+                }
+            }
         } catch {
             print("Schreiben von \(filename) fehlgeschlagen: \(error)")
         }

@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var vm: AppViewModel
-    @Environment(\.dismiss) var dismiss
+    @StateObject private var sync = SyncManager.shared
 
     @State private var startgeld: String = ""
     @State private var pumpe: String = ""
@@ -12,8 +12,75 @@ struct SettingsView: View {
     @State private var bahngebuehr: String = ""
     @State private var saved = false
 
+    @State private var linkInput: String = ""
+    @State private var isValidating = false
+    @State private var linkSaved = false
+    @State private var linkError: String? = nil
+
     var body: some View {
         Form {
+            // OneDrive Sync Section
+            Section {
+                VStack(alignment: .leading, spacing: 10) {
+                    // Status
+                    HStack(spacing: 8) {
+                        if sync.status.isLoading {
+                            ProgressView().scaleEffect(0.8)
+                        } else {
+                            Image(systemName: syncStatusIcon)
+                                .foregroundColor(syncStatusColor)
+                        }
+                        Text(sync.status == .idle ? (sync.hasLink ? "Verbunden" : "Kein Link") : sync.status.message)
+                            .font(.subheadline)
+                            .foregroundColor(syncStatusColor)
+                    }
+
+                    TextField("https://1drv.ms/f/s!A...", text: $linkInput)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .keyboardType(.URL)
+                        .font(.caption)
+
+                    if let err = linkError {
+                        Text(err).font(.caption).foregroundColor(.red)
+                    }
+
+                    HStack(spacing: 12) {
+                        Button {
+                            Task { await speichereLink() }
+                        } label: {
+                            if isValidating {
+                                ProgressView().scaleEffect(0.8)
+                            } else {
+                                Text(linkSaved ? "Gespeichert ✓" : "Link speichern")
+                            }
+                        }
+                        .disabled(linkInput.isEmpty || isValidating)
+                        .buttonStyle(.bordered)
+                        .tint(linkSaved ? .green : .accentColor)
+
+                        Button {
+                            Task { await sync.downloadAll() }
+                        } label: {
+                            Label("Jetzt sync", systemImage: "arrow.clockwise")
+                        }
+                        .disabled(!sync.hasLink || sync.status.isLoading)
+                        .buttonStyle(.bordered)
+                    }
+
+                    if let last = sync.lastSync {
+                        Text("Letzter Sync: \(formatLastSync(last))")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            } header: {
+                Label("OneDrive Synchronisation", systemImage: "cloud")
+            } footer: {
+                Text("Freigabelink mit 'Jeder mit dem Link kann bearbeiten'. Internet wird nur zum Sync benötigt.")
+            }
+
             Section("Gebühren") {
                 BetragField(label: "Startgeld", value: $startgeld)
                 BetragField(label: "Strafe (Abwesend)", value: $strafeStamm)
@@ -42,7 +109,48 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Kosten Einstellungen")
-        .onAppear { laden() }
+        .onAppear {
+            laden()
+            linkInput = sync.sharingLink
+        }
+    }
+
+    private var syncStatusIcon: String {
+        switch sync.status {
+        case .idle:    return sync.hasLink ? "checkmark.circle" : "xmark.circle"
+        case .syncing: return "arrow.clockwise"
+        case .success: return "checkmark.circle.fill"
+        case .error:   return "exclamationmark.triangle.fill"
+        }
+    }
+
+    private var syncStatusColor: Color {
+        switch sync.status {
+        case .idle:    return sync.hasLink ? .green : .secondary
+        case .syncing: return .blue
+        case .success: return .green
+        case .error:   return .red
+        }
+    }
+
+    private func speichereLink() async {
+        isValidating = true
+        linkError = nil
+        linkSaved = false
+        let ok = await sync.validateAndSaveLink(linkInput)
+        isValidating = false
+        if ok {
+            linkSaved = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { linkSaved = false }
+        } else {
+            linkError = "Link ungültig oder kein Schreibzugriff"
+        }
+    }
+
+    private func formatLastSync(_ date: Date) -> String {
+        let f = DateFormatter()
+        f.dateFormat = "dd.MM.yyyy HH:mm"
+        return f.string(from: date)
     }
 
     private func laden() {
