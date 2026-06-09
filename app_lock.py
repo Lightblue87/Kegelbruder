@@ -18,9 +18,10 @@ def _lock_ist_abgelaufen(seit_str: str) -> bool:
     try:
         seit = datetime.fromisoformat(seit_str)
         jetzt = datetime.now()
+        from datetime import timedelta
         reset_heute = datetime.combine(jetzt.date(), RESET_UHRZEIT)
         letzter_reset = reset_heute if jetzt >= reset_heute else datetime.combine(
-            jetzt.date().replace(day=jetzt.day - 1), RESET_UHRZEIT
+            (jetzt - timedelta(days=1)).date(), RESET_UHRZEIT
         )
         return seit < letzter_reset
     except Exception:

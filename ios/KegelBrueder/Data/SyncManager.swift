@@ -1,7 +1,7 @@
 import Foundation
-import Combine
+import SwiftUI
 
-// MARK: - SyncManager: orchestrates local DataStore ↔ OneDrive sync
+// MARK: - SyncManager: up/download kegelbruder.db via OneDrive Graph API
 
 @MainActor
 class SyncManager: ObservableObject {
@@ -9,7 +9,8 @@ class SyncManager: ObservableObject {
     static let shared = SyncManager()
 
     private let oneDrive = OneDriveSyncService.shared
-    private let linkKey = "oneDriveSharingLink"
+    private let linkKey  = "oneDriveSharingLink"
+    private let dbFilename = "kegelbruder.db"
 
     @Published var status: SyncStatus = .idle
     @Published var lastSync: Date? = nil
@@ -18,8 +19,6 @@ class SyncManager: ObservableObject {
     private init() {
         sharingLink = UserDefaults.standard.string(forKey: linkKey) ?? ""
     }
-
-    // MARK: - Link management
 
     var hasLink: Bool { !sharingLink.trimmingCharacters(in: .whitespaces).isEmpty }
 
@@ -40,94 +39,53 @@ class SyncManager: ObservableObject {
         return ok
     }
 
-    // MARK: - Download (OneDrive → lokal)
+    // MARK: - Download DB from OneDrive → replace local DB
 
     func downloadAll() async {
         guard hasLink else { status = .idle; return }
-        status = .syncing("Daten werden geladen…")
-
+        status = .syncing("Datenbank wird geladen…")
         do {
-            let files = try await oneDrive.downloadAll(sharingLink: sharingLink)
-            applyDownloaded(files)
+            let data = try await oneDrive.downloadFile(
+                sharingLink: sharingLink, filename: dbFilename
+            )
+            await DataStore.shared.replaceDatabase(with: data)
             lastSync = Date()
             status = .success("Synchronisiert \(formatTime(lastSync!))")
+        } catch SyncError.httpError(404, _) {
+            // DB existiert noch nicht in OneDrive – erster Start, kein Fehler
+            status = .idle
         } catch {
             status = .error("Download fehlgeschlagen: \(error.localizedDescription)")
         }
     }
 
-    // MARK: - Upload (lokal → OneDrive)
-
-    func uploadFile(_ filename: String, data: Data) async {
-        guard hasLink else { return }
-        do {
-            try await oneDrive.uploadFile(sharingLink: sharingLink, filename: filename, data: data)
-            lastSync = Date()
-        } catch {
-            status = .error("Upload \(filename): \(error.localizedDescription)")
-        }
-    }
+    // MARK: - Upload local DB → OneDrive
 
     func uploadAll(from store: DataStore) async {
         guard hasLink else { return }
-        status = .syncing("Daten werden hochgeladen…")
-
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-
-        let filesToUpload: [(String, Encodable)] = [
-            ("mitglieder.json",    store.ladeMitglieder()),
-            ("kasse.json",         store.ladeKasse()),
-            ("aktuelles_spiel.json", store.ladeAktuellesSpiel()),
-            ("historie.json",      store.ladeHistorie()),
-        ]
-
-        for (filename, value) in filesToUpload {
-            guard let data = try? encoder.encode(AnyEncodable(value)) else { continue }
-            await uploadFile(filename, data: data)
+        guard let data = store.dbFileData() else { return }
+        status = .syncing("Datenbank wird hochgeladen…")
+        do {
+            try await oneDrive.uploadFile(
+                sharingLink: sharingLink, filename: dbFilename, data: data
+            )
+            lastSync = Date()
+            status = .success("Hochgeladen \(formatTime(lastSync!))")
+        } catch {
+            status = .error("Upload fehlgeschlagen: \(error.localizedDescription)")
         }
-
-        lastSync = Date()
-        status = .success("Hochgeladen \(formatTime(lastSync!))")
     }
 
-    // MARK: - Apply downloaded data to local DataStore
-
-    private func applyDownloaded(_ files: [String: Data]) {
-        let store = DataStore.shared
-        let decoder = JSONDecoder()
-
-        if let data = files["mitglieder.json"],
-           let decoded = try? decoder.decode(MitgliederFile.self, from: data) {
-            store.speichereMitglieder(decoded)
-        }
-
-        if let data = files["kasse.json"],
-           let decoded = try? decoder.decode(KasseFile.self, from: data) {
-            store.speichereKasse(decoded)
-        }
-
-        if let data = files["aktuelles_spiel.json"],
-           let decoded = try? decoder.decode(AktuellesSpielFile.self, from: data) {
-            store.speichereAktuellesSpiel(decoded)
-        }
-
-        if let data = files["historie.json"],
-           let decoded = try? decoder.decode([HistorieEntry].self, from: data) {
-            store.speichereHistorie(decoded)
-        }
-
-        if let data = files["kegelbruder.lock"],
-           let decoded = try? decoder.decode(AppLockFile.self, from: data) {
-            // Only write lock if it exists remotely
-            store.write("kegelbruder.lock", value: decoded)
-        }
+    // Einzeldatei-Upload (wird von DataStore.write() aufgerufen – jetzt ein No-op,
+    // da wir die ganze DB uploaden, nicht einzelne Dateien)
+    func uploadFile(_ filename: String, data: Data) async {
+        // Bei SQLite-basiertem Sync wird die ganze DB hochgeladen, nicht einzelne Dateien.
+        // Trigger: nach jeder Schreiboperation die DB hochladen.
+        await uploadAll(from: DataStore.shared)
     }
 
     private func formatTime(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        return f.string(from: date)
+        let f = DateFormatter(); f.dateFormat = "HH:mm"; return f.string(from: date)
     }
 }
 
@@ -141,35 +99,12 @@ enum SyncStatus: Equatable {
 
     var message: String {
         switch self {
-        case .idle:             return ""
-        case .syncing(let m):  return m
-        case .success(let m):  return m
-        case .error(let m):    return m
+        case .idle:            return ""
+        case .syncing(let m): return m
+        case .success(let m): return m
+        case .error(let m):   return m
         }
     }
 
-    var color: some View {
-        switch self {
-        case .idle:    return Color.secondary
-        case .syncing: return Color.blue
-        case .success: return Color.green
-        case .error:   return Color.red
-        }
-    }
-
-    var isLoading: Bool {
-        if case .syncing = self { return true }
-        return false
-    }
+    var isLoading: Bool { if case .syncing = self { return true }; return false }
 }
-
-// MARK: - Type-erased Encodable helper
-
-private struct AnyEncodable: Encodable {
-    private let _encode: (Encoder) throws -> Void
-    init(_ value: Encodable) { self._encode = value.encode }
-    func encode(to encoder: Encoder) throws { try _encode(encoder) }
-}
-
-// SwiftUI import for color
-import SwiftUI
