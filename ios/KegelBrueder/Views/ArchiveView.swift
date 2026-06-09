@@ -79,27 +79,33 @@ struct ArchiveDetailView: View {
                         HStack {
                             Text("\(platz).")
                                 .frame(width: 36, alignment: .leading)
-                                .font(.subheadline.bold())
-                                .foregroundColor(platz == 1 ? .yellow : .primary)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(platz == 1 ? .kbBrass500 : .kbTextSecondary)
                             Text(name)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .font(.subheadline)
+                                .font(.system(size: 15, weight: platz == 1 ? .semibold : .regular))
+                                .foregroundColor(platz == 1 ? .kbBrass500 : .primary)
                             ForEach(0..<4, id: \.self) { i in
                                 Text("\(data.punkte.indices.contains(i) ? data.punkte[i] : 0)")
                                     .frame(width: 40, alignment: .center)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.kbTextSecondary)
+                                    .monospacedDigit()
                             }
                             Text("\(data.punkte.reduce(0,+))")
                                 .frame(width: 44, alignment: .center)
-                                .font(.subheadline.bold())
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(platz == 1 ? .kbBrass500 : .primary)
+                                .monospacedDigit()
                             Text("\(data.pumpen ?? 0)")
                                 .frame(width: 44, alignment: .center)
-                                .font(.subheadline)
-                                .foregroundColor(.red)
+                                .font(.system(size: 14))
+                                .foregroundColor(.kbPumpe)
+                                .monospacedDigit()
                         }
                         .padding(.horizontal)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 8)
+                        .background(platz == 1 ? Color.kbBrass400.opacity(0.07) : Color.clear)
                         Divider()
                     }
                 }
@@ -115,15 +121,16 @@ struct ArchiveDetailView: View {
 
                     VStack(spacing: 0) {
                         ForEach(Array(entry.transaktionen.enumerated()), id: \.offset) { _, tx in
-                            HStack {
+                            HStack(spacing: 10) {
+                                let isNeg = tx.contains("| -")
                                 Circle()
-                                    .fill(tx.contains("| +") || tx.contains("+") ? Color.green.opacity(0.7) : Color.red.opacity(0.7))
+                                    .fill(isNeg ? Color.kbDanger : Color.kbSuccess)
                                     .frame(width: 8, height: 8)
                                 Text(tx)
-                                    .font(.caption)
+                                    .font(.system(size: 13))
                             }
                             .padding(.horizontal)
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 5)
                             Divider()
                         }
                     }

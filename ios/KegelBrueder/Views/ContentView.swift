@@ -33,7 +33,7 @@ struct ContentView: View {
                             vm.starteNeuesSpiel()
                         } label: {
                             Label("Neues Spiel", systemImage: "play.circle.fill")
-                                .foregroundColor(.accentColor)
+                                .foregroundColor(.kbPrimary)
                                 .font(.headline)
                         }
                     }
@@ -85,17 +85,8 @@ struct ContentView: View {
                 GameSessionView()
                     .environmentObject(vm)
             } else {
-                VStack(spacing: 16) {
-                    Image(systemName: "figure.bowling")
-                        .font(.system(size: 64))
-                        .foregroundColor(.secondary)
-                    Text("Bereit zum Kegeln!")
-                        .font(.title2)
-                        .foregroundColor(.secondary)
-                    Button("Neues Spiel starten") {
-                        vm.starteNeuesSpiel()
-                    }
-                    .buttonStyle(.borderedProminent)
+                ReadyScreen {
+                    vm.starteNeuesSpiel()
                 }
             }
         }
@@ -132,6 +123,45 @@ struct ContentView: View {
                 .environmentObject(vm)
         case .tiebreak:
             EmptyView()
+        }
+    }
+}
+
+// MARK: - Ready Screen
+
+struct ReadyScreen: View {
+    let onStart: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(Color.kbPrimaryTint)
+                    .frame(width: 100, height: 100)
+                    .shadow(color: Color.kbPrimary.opacity(0.18), radius: 12, y: 6)
+                Image(systemName: "figure.bowling")
+                    .font(.system(size: 52))
+                    .foregroundColor(.kbPrimary)
+            }
+
+            VStack(spacing: 6) {
+                Text("Bereit zum Kegeln!")
+                    .font(.system(size: 28, weight: .bold))
+                    .tracking(-0.3)
+                Text("Starte ein neues Spiel, um die Punkteingabe zu öffnen.")
+                    .font(.system(size: 16))
+                    .foregroundColor(.kbTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+
+            Button {
+                onStart()
+            } label: {
+                Label("Neues Spiel starten", systemImage: "play.circle.fill")
+            }
+            .buttonStyle(KBGlassButton(prominent: true))
+            .padding(.top, 4)
         }
     }
 }

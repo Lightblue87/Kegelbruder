@@ -18,36 +18,28 @@ struct CashManagementView: View {
 
     var body: some View {
         Form {
+            // Kassenstand
             Section {
-                HStack {
-                    Spacer()
-                    VStack(spacing: 4) {
-                        Text("Kassenstand")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Text("\(String(format: "%.2f", vm.kasse.Kassenstand)) €")
-                            .font(.largeTitle.bold())
-                            .foregroundColor(vm.kasse.Kassenstand >= 0 ? .primary : .red)
-                    }
-                    Spacer()
-                }
-                .padding(.vertical, 8)
+                KBKassenstandView(betrag: vm.kasse.Kassenstand)
             }
 
+            // Offene Zahlungen
             if !stammMitNamen.isEmpty {
                 Section("Offene Zahlungen") {
                     ForEach(stammMitNamen, id: \.name) { item in
                         HStack {
                             Text(item.name)
                             Spacer()
-                            Text("\(String(format: "%.2f", item.schuld)) €")
-                                .foregroundColor(.red)
-                                .bold()
+                            Text(String(format: "%.2f €", item.schuld))
+                                .foregroundColor(.kbDanger)
+                                .fontWeight(.semibold)
+                                .monospacedDigit()
                         }
                     }
                 }
             }
 
+            // Buchung
             Section("Buchung") {
                 Picker("Art", selection: $istEinzahlung) {
                     Text("Einzahlung").tag(true)
@@ -62,6 +54,7 @@ struct CashManagementView: View {
                         .keyboardType(.decimalPad)
                         .multilineTextAlignment(.trailing)
                         .frame(width: 100)
+                        .monospacedDigit()
                 }
 
                 TextField("Beschreibung", text: $beschreibung)
@@ -77,7 +70,7 @@ struct CashManagementView: View {
 
                 if let err = errorMessage {
                     Text(err)
-                        .foregroundColor(.red)
+                        .foregroundColor(.kbDanger)
                         .font(.caption)
                 }
 
@@ -91,14 +84,15 @@ struct CashManagementView: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(istEinzahlung ? .green : .red)
+                .tint(istEinzahlung ? .kbSuccess : .kbDanger)
             }
 
+            // Transaktionen
             Section("Letzte Transaktionen") {
                 let transaktionen = vm.kasse.Transaktionen.suffix(50).reversed()
                 if transaktionen.isEmpty {
                     Text("Keine Transaktionen")
-                        .foregroundColor(.secondary)
+                        .foregroundColor(.kbTextSecondary)
                         .italic()
                 } else {
                     ForEach(Array(transaktionen.enumerated()), id: \.offset) { _, tx in
@@ -142,16 +136,17 @@ struct CashManagementView: View {
 struct TransactionRow: View {
     let text: String
 
-    var isPositive: Bool { text.contains("|") ? text.contains("| +") : true }
     var isNegative: Bool { text.contains("| -") }
 
     var body: some View {
-        HStack {
+        HStack(spacing: 10) {
             Circle()
-                .fill(isNegative ? Color.red.opacity(0.7) : Color.green.opacity(0.7))
+                .fill(isNegative ? Color.kbDanger : Color.kbSuccess)
                 .frame(width: 8, height: 8)
+                .shadow(color: (isNegative ? Color.kbDanger : Color.kbSuccess).opacity(0.4), radius: 3)
             Text(text)
-                .font(.caption)
+                .font(.system(size: 13))
+                .foregroundColor(.primary)
                 .lineLimit(2)
         }
     }

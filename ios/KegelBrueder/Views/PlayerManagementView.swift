@@ -15,19 +15,14 @@ struct PlayerManagementView: View {
             ForEach(sortedPlayers, id: \.0) { name, data in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack {
+                        HStack(spacing: 8) {
                             Text(name).font(.headline)
-                            Text(data.typ)
-                                .font(.caption)
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(data.typ == "Stamm" ? Color.blue.opacity(0.15) : Color.orange.opacity(0.15))
-                                .foregroundColor(data.typ == "Stamm" ? .blue : .orange)
-                                .cornerRadius(4)
+                            KBPill(data.typ, tone: data.typ == "Stamm" ? .primary : .guest)
                         }
                         if data.offene_zahlung > 0 {
-                            Text("Offen: \(String(format: "%.2f", data.offene_zahlung)) €")
-                                .font(.caption)
-                                .foregroundColor(.red)
+                            Text(String(format: "Offen: %.2f €", data.offene_zahlung))
+                                .font(.system(size: 12))
+                                .foregroundColor(.kbDanger)
                         }
                     }
                     Spacer()
@@ -124,7 +119,7 @@ struct PlayerEditSheet: View {
 
                 if let err = error {
                     Section {
-                        Text(err).foregroundColor(.red)
+                        Text(err).foregroundColor(.kbDanger)
                     }
                 }
             }

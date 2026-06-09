@@ -57,7 +57,7 @@ struct SettingsView: View {
                         }
                         .disabled(linkInput.isEmpty || isValidating)
                         .buttonStyle(.bordered)
-                        .tint(linkSaved ? .green : .accentColor)
+                        .tint(linkSaved ? .kbSuccess : .kbPrimary)
 
                         Button {
                             Task { await sync.downloadAll() }
@@ -126,10 +126,10 @@ struct SettingsView: View {
 
     private var syncStatusColor: Color {
         switch sync.status {
-        case .idle:    return sync.hasLink ? .green : .secondary
-        case .syncing: return .blue
-        case .success: return .green
-        case .error:   return .red
+        case .idle:    return sync.hasLink ? .kbSuccess : .kbTextSecondary
+        case .syncing: return .kbPrimary
+        case .success: return .kbSuccess
+        case .error:   return .kbDanger
         }
     }
 
