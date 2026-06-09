@@ -361,7 +361,10 @@ class AppViewModel: ObservableObject {
 
         if let name = spielerName {
             var m = store.ladeMitglieder()
-            m.players[name]?.offene_zahlung = max(0, (m.players[name]?.offene_zahlung ?? 0) - betrag)
+            if var player = m.players[name] {
+                player.offene_zahlung = max(0, player.offene_zahlung - betrag)
+                m.players[name] = player
+            }
             store.speichereMitglieder(m)
             mitglieder = m.players
         }
