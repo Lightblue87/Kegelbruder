@@ -23,7 +23,6 @@ from datetime import datetime
 from tkinter import messagebox, ttk
 
 from cashbox import Kasse
-from config import get_data_path
 from data_handler import DatenHandler
 from gui.archive import ArchiveWindow
 from gui.attendance import AttendanceFlow
@@ -32,7 +31,6 @@ from gui.cash_management import CashManagementWindow
 from gui.game_session import GameSessionFrame
 from gui.player_management import PlayerManagementWindow
 from gui.settings import KostenEinstellungenWindow
-from storage import AtomicFileWriter
 
 
 class KegelBruederApp:
@@ -272,17 +270,9 @@ class KegelBruederApp:
 
     def lade_letzte_reihenfolge(self):
         try:
-            historie = DatenHandler._safe_read_json(get_data_path("historie"), [])
-            if historie:
-                def _to_dt(e):
-                    try:
-                        return datetime.strptime(e.get("datum", "01.01.1900"), "%d.%m.%Y")
-                    except Exception:
-                        return datetime.min
-                last  = sorted(historie, key=_to_dt, reverse=True)[0]
-                order = last.get("spieler_reihenfolge")
-                if order and isinstance(order, list) and len(order) > 0:
-                    return order
+            historic = DatenHandler.laden_letzte_reihenfolge()
+            if historic:
+                return historic
         except Exception:
             pass
 
@@ -299,9 +289,9 @@ class KegelBruederApp:
         return sorted(list(self.players.keys()))
 
     def save_results(self):
-        data = {"players": self.players, "kasse": self.kasse.kasse}
+        # Kasse wird laufend via speichere_kasse() gespeichert; hier nur Mitglieder sichern.
         try:
-            AtomicFileWriter.atomic_write(get_data_path("data"), data)
+            DatenHandler.speichern_mitglieder(self.players)
         except Exception as e:
             messagebox.showerror("Fehler", f"Speichern fehlgeschlagen: {e}")
 

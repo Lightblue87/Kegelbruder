@@ -10,6 +10,7 @@ import logging
 import tkinter as tk
 
 from app_lock import lock_freigeben, lock_pruefen_und_setzen
+from database import init_db
 from styles import setup_styles
 from app import KegelBruederApp
 
@@ -21,6 +22,7 @@ logging.basicConfig(
 )
 
 if __name__ == "__main__":
+    init_db()
     root = tk.Tk()
     setup_styles()
 

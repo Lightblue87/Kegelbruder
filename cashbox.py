@@ -1,15 +1,12 @@
-import json
 import logging
-import os
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 
-from config import get_data_path
-from storage import AtomicFileWriter
+from database import get_connection
 
 
 # =============================================================================
-# Kassen-Logik
+# Kassen-Logik (SQLite)
 # =============================================================================
 class Kasse:
     def __init__(self):
@@ -21,7 +18,8 @@ class Kasse:
             "Strafe Stamm": 7.5,
             "Bahngebühr": 30.0,
             "Kassenstand": 0.0,
-            "Transaktionen": []
+            "Transaktionen": [],
+            "Letzte_Startgebuehren": 0.0,
         }
         self.lade_kasse()
 
@@ -30,42 +28,50 @@ class Kasse:
         return float(
             self.kasse.get("Bahngebühr")
             or self.kasse.get("Bahngebuehr")
-            or self.kasse.get("Bahngeb\u00fchr")
+            or self.kasse.get("Bahngebühr")
             or 0
         )
 
     def lade_kasse(self):
-        if os.path.exists(get_data_path("kasse")):
-            try:
-                with open(get_data_path("kasse"), "r") as f:
-                    self.kasse = json.load(f)
-            except json.JSONDecodeError:
-                self.speichere_kasse()
-                return
-        else:
-            self.speichere_kasse()
-            return
+        """Lädt Kassendaten aus kasse_einstellungen + transaktionen."""
+        conn = get_connection()
+        rows = conn.execute(
+            "SELECT schluessel, wert FROM kasse_einstellungen"
+        ).fetchall()
+        for row in rows:
+            self.kasse[row["schluessel"]] = row["wert"]
 
-        defaults = {
-            "Startgeld": 5, "Pumpe": 0.5, "Neuner": 1, "Kranz": 2,
-            "Strafe Stamm": 7.5, "Bahngebühr": 30, "Kassenstand": 0,
-            "Transaktionen": []
-        }
-        changed = False
-        for k, v in defaults.items():
-            if k not in self.kasse:
-                self.kasse[k] = v
-                changed = True
-        if not isinstance(self.kasse.get("Transaktionen", []), list):
-            self.kasse["Transaktionen"] = []
-            changed = True
-        if changed:
-            self.speichere_kasse()
+        # Transaktionen laden (letzte 200)
+        tx_rows = conn.execute(
+            "SELECT text FROM transaktionen ORDER BY id DESC LIMIT 200"
+        ).fetchall()
+        # Umgekehrt, damit neueste am Ende steht
+        self.kasse["Transaktionen"] = [r["text"] for r in reversed(tx_rows)]
 
     def speichere_kasse(self):
+        """Schreibt Kassendaten in kasse_einstellungen + transaktionen."""
+        conn = get_connection()
         try:
-            AtomicFileWriter.atomic_write(get_data_path("kasse"), self.kasse)
+            felder = [
+                "Startgeld", "Pumpe", "Neuner", "Kranz",
+                "Strafe Stamm", "Bahngebühr", "Kassenstand", "Letzte_Startgebuehren"
+            ]
+            for key in felder:
+                if key in self.kasse:
+                    conn.execute(
+                        "INSERT OR REPLACE INTO kasse_einstellungen (schluessel, wert) VALUES (?, ?)",
+                        (key, float(self.kasse[key])),
+                    )
+
+            # Transaktionen komplett ersetzen
+            conn.execute("DELETE FROM transaktionen")
+            for tx in self.kasse.get("Transaktionen", []):
+                conn.execute(
+                    "INSERT INTO transaktionen (text) VALUES (?)", (tx,)
+                )
+            conn.commit()
         except Exception as e:
+            conn.rollback()
             logging.error(f"Speichern Kasse fehlgeschlagen: {e}")
 
     def aktualisiere_kasse(self, players):
@@ -74,11 +80,9 @@ class Kasse:
         self.speichere_kasse()
 
     def anpassen_gebuehren(self, kategorie, betrag):
-        # FIX: Input-Validierung
         if betrag < 0:
             logging.warning(f"Negativer Betrag für {kategorie}: {betrag}")
             return False
-
         if kategorie in self.kasse and isinstance(betrag, (int, float)) and betrag >= 0:
             self.kasse[kategorie] = float(betrag)
             self.speichere_kasse()
@@ -86,22 +90,13 @@ class Kasse:
         return False
 
     def einzahlung(self, betrag, beschreibung="Manuelle Einzahlung"):
-        """Fügt Geld zur Kasse hinzu und speichert die Transaktion.
-
-        Hinweis: Das Reduzieren offener Spieler-Zahlungen obliegt dem Aufrufer
-        (DatenHandler.reduziere_ausstehende_zahlung), nicht der Kasse selbst.
-        """
-        # FIX: Input-Validierung
         if betrag < 0:
             logging.warning(f"Negative Einzahlung verweigert: {betrag}")
             return False
-
         if betrag <= 0:
             return False
 
         datum = datetime.now().strftime("%d.%m.%Y")
-
-        # FIX #8: Decimal-Arithmetik für Geldbeträge
         betrag_decimal = Decimal(str(betrag)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
         betrag = float(betrag_decimal)
 
@@ -116,23 +111,17 @@ class Kasse:
 
         self.kasse["Kassenstand"] += betrag
         self.kasse["Transaktionen"].append(f"{datum} | +{betrag:.2f}€: {beschreibung}")
-
         self.speichere_kasse()
         return True
 
     def auszahlung(self, betrag, beschreibung="Manuelle Auszahlung"):
-        # FIX: Input-Validierung
         if betrag < 0:
             logging.warning(f"Negative Auszahlung verweigert: {betrag}")
             return False
-
         if 0 < betrag <= self.kasse["Kassenstand"]:
             datum = datetime.now().strftime("%d.%m.%Y")
-
-            # FIX #8: Decimal-Arithmetik
             betrag_decimal = Decimal(str(betrag)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
             betrag = float(betrag_decimal)
-
             self.kasse["Kassenstand"] -= betrag
             self.kasse["Transaktionen"].append(f"{datum} | -{betrag:.2f}€: {beschreibung}")
             self.speichere_kasse()

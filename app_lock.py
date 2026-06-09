@@ -1,84 +1,72 @@
 """
-app_lock.py – Exklusiver Zugriffsschutz via Lock-Datei (OneDrive-kompatibel)
+app_lock.py – Exklusiver Zugriffsschutz via app_lock-Tabelle (SQLite)
 
-Die Lock-Datei liegt im selben Ordner wie die JSON-Daten.
-Automatischer Reset täglich um 01:00 Uhr (falls App abstürzt oder nicht sauber beendet wurde).
+Automatischer Reset täglich um 01:00 Uhr.
 """
 
-import json
 import logging
-import os
 import platform
 import socket
 from datetime import datetime, time as dt_time
 
-from config import get_data_path
+from database import get_connection
 
-LOCK_FILE = "kegelbruder.lock"  # Dateiname; Pfad immer über get_data_path("lock")
-RESET_UHRZEIT = dt_time(1, 0)   # 01:00 Uhr
+RESET_UHRZEIT = dt_time(1, 0)
 
 
 def _lock_ist_abgelaufen(seit_str: str) -> bool:
-    """Lock gilt als veraltet wenn er vor dem letzten 01:00-Uhr-Schnitt gesetzt wurde."""
     try:
         seit = datetime.fromisoformat(seit_str)
         jetzt = datetime.now()
-
-        # Letzter 01:00-Uhr-Zeitpunkt (heute oder gestern)
         reset_heute = datetime.combine(jetzt.date(), RESET_UHRZEIT)
         letzter_reset = reset_heute if jetzt >= reset_heute else datetime.combine(
             jetzt.date().replace(day=jetzt.day - 1), RESET_UHRZEIT
         )
-
         return seit < letzter_reset
     except Exception:
-        return True  # Im Zweifel: abgelaufen
+        return True
 
 
 def lock_lesen() -> dict | None:
-    """Gibt den Lock-Inhalt zurück, oder None wenn kein Lock existiert."""
-    pfad = get_data_path("lock")
-    if not os.path.exists(pfad):
-        return None
     try:
-        with open(pfad, "r", encoding="utf-8") as f:
-            return json.load(f)
+        conn = get_connection()
+        row = conn.execute("SELECT geraet, seit, plattform FROM app_lock WHERE id = 1").fetchone()
+        if row is None:
+            return None
+        return {"gerät": row["geraet"], "seit": row["seit"], "plattform": row["plattform"]}
     except Exception:
         return None
 
 
 def lock_setzen():
-    """Erstellt die Lock-Datei für dieses Gerät."""
     inhalt = {
-        "gerät": platform.node() or socket.gethostname() or "Unbekannt",
-        "seit": datetime.now().isoformat(),
+        "gerät":     platform.node() or socket.gethostname() or "Unbekannt",
+        "seit":      datetime.now().isoformat(),
         "plattform": platform.system(),
     }
     try:
-        with open(get_data_path("lock"), "w", encoding="utf-8") as f:
-            json.dump(inhalt, f, indent=2, ensure_ascii=False)
+        conn = get_connection()
+        conn.execute(
+            "INSERT OR REPLACE INTO app_lock (id, geraet, seit, plattform) VALUES (1, ?, ?, ?)",
+            (inhalt["gerät"], inhalt["seit"], inhalt["plattform"]),
+        )
+        conn.commit()
         logging.info(f"Lock gesetzt: {inhalt}")
     except Exception as e:
         logging.error(f"Lock konnte nicht gesetzt werden: {e}")
 
 
 def lock_freigeben():
-    """Löscht die Lock-Datei beim sauberen Beenden."""
     try:
-        pfad = get_data_path("lock")
-        if os.path.exists(pfad):
-            os.remove(pfad)
-            logging.info("Lock freigegeben.")
+        conn = get_connection()
+        conn.execute("DELETE FROM app_lock WHERE id = 1")
+        conn.commit()
+        logging.info("Lock freigegeben.")
     except Exception as e:
         logging.error(f"Lock konnte nicht gelöscht werden: {e}")
 
 
 def lock_pruefen_und_setzen(root) -> bool:
-    """
-    Prüft ob ein anderes Gerät die App bereits offen hat.
-    Gibt True zurück wenn die App starten darf, False wenn sie blockiert wird.
-    root: Tkinter-Root (für Dialoge)
-    """
     from tkinter import messagebox
 
     lock = lock_lesen()
@@ -87,13 +75,11 @@ def lock_pruefen_und_setzen(root) -> bool:
         lock_setzen()
         return True
 
-    # Abgelaufener Lock (vor 01:00 Uhr des aktuellen Tages gesetzt)
     if _lock_ist_abgelaufen(lock.get("seit", "")):
         logging.info("Veralteter Lock gefunden – wird übernommen.")
         lock_setzen()
         return True
 
-    # Aktiver Lock von einem anderen Gerät
     gerät = lock.get("gerät", "Unbekannt")
     seit_raw = lock.get("seit", "")
     try:

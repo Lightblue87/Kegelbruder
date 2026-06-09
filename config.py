@@ -3,6 +3,8 @@
 import json
 import os
 
+
+
 # Die App-Einstellungen (inkl. Datenpfad) liegen immer neben der App selbst
 _APP_DIR = os.path.dirname(os.path.abspath(__file__))
 _APP_SETTINGS_FILE = os.path.join(_APP_DIR, "app_settings.json")
@@ -58,11 +60,7 @@ def get_daten_verzeichnis() -> str:
     return _lade_daten_verzeichnis()
 
 
-# Rückwärtskompatible Konstanten (werden beim Import einmalig gesetzt –
-# für Code der noch direkt importiert, aber get_data_path() ist bevorzugt)
-DATA_FILE       = get_data_path("data")
-DATA_FILE_KASSE = get_data_path("kasse")
-AKTUELLES_SPIEL = get_data_path("spiel")
-HISTORIE_FILE   = get_data_path("historie")
-MITGLIEDER_DATEI= get_data_path("mitglieder")
-LOCK_FILE_PATH  = get_data_path("lock")
+def get_db_path() -> str:
+    """Gibt den vollständigen Pfad zur SQLite-Datenbankdatei zurück."""
+    return os.path.join(get_daten_verzeichnis(), "kegelbruder.db")
+

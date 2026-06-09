@@ -151,9 +151,23 @@ class KostenEinstellungenWindow:
             return
 
         speichere_daten_verzeichnis(neuer_pfad)
+
+        # DB-Verbindung zurücksetzen damit beim nächsten Zugriff die neue DB geöffnet wird
+        import database
+        if database._connection is not None:
+            try:
+                database._connection.close()
+            except Exception:
+                pass
+            database._connection = None
+
+        from database import init_db
+        init_db()
+
         messagebox.showinfo(
             "Gespeichert",
             f"Datenordner gespeichert:\n{neuer_pfad}\n\n"
-            "Bitte die App neu starten damit der neue Ordner verwendet wird.",
+            "Die App verwendet ab sofort diesen Ordner.\n"
+            "Bestehende Daten müssen ggf. manuell kopiert werden.",
             parent=self.win
         )
