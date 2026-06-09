@@ -146,6 +146,7 @@ class BillingWindow:
     def _abrechnung_speichern(self):
         """Verbucht Strafen, Spenden, Bahngebühr und schließt das Spielgeschehen."""
         datum = datetime.now().strftime("%d.%m.%Y")
+        archive_start_index = len(self.app.kasse.kasse.get("Transaktionen", []))
 
         tiebreak = getattr(self.app, "tiebreak_extras", {}) or {}
 
@@ -185,30 +186,55 @@ class BillingWindow:
             )
             self.app.kasse.speichere_kasse()
 
-        gesamt_strafen = 0.0
+        mitglieder = DatenHandler.laden_mitglieder().get("players", {})
+        gesamt_zahlungen = 0.0
+
         for player, betrag in kosten.items():
             betrag = round(float(betrag), 2)
-            if betrag > 0:
-                self.app._session_einzahlung(betrag, f"{datum} - Strafenanteil von {player}")
-                gesamt_strafen += betrag
+            player_data = dict(mitglieder.get(player, self.app.players.get(player, {})))
+            player_data.setdefault("typ", self.app.players.get(player, {}).get("typ", "Stamm"))
+            player_data.setdefault("punkte", self.app.players.get(player, {}).get("punkte", [0, 0, 0, 0]))
+            player_data["offene_zahlung"] = float(player_data.get("offene_zahlung", 0.0))
 
-        gesamt_spenden = 0.0
-        for player, (zu_zahlen, gezahlt_var) in self.abrechnung_entries.items():
+            if betrag > 0:
+                player_data["offene_zahlung"] = round(player_data["offene_zahlung"] + betrag, 2)
+                self.app.kasse.kasse["Transaktionen"].append(
+                    f"{datum} | {betrag:.2f}€: {datum} - Strafe belastet: {player}"
+                )
+
+            _, gezahlt_var = self.abrechnung_entries.get(player, (betrag, None))
             try:
-                gezahlt = float((gezahlt_var.get() or "0").replace(",", "."))
+                gezahlt = float((gezahlt_var.get() if gezahlt_var else "0").replace(",", "."))
             except Exception:
                 gezahlt = 0.0
-            spende = round(gezahlt - float(zu_zahlen), 2)
+            gezahlt = max(0.0, round(float(gezahlt), 2))
+
+            zahlung_auf_schuld = min(gezahlt, player_data["offene_zahlung"])
+            if zahlung_auf_schuld > 0:
+                player_data["offene_zahlung"] = round(
+                    max(0.0, player_data["offene_zahlung"] - zahlung_auf_schuld), 2
+                )
+                self.app._session_einzahlung(zahlung_auf_schuld, f"{datum} - Zahlung von {player}")
+                gesamt_zahlungen += zahlung_auf_schuld
+
+            spende = round(max(0.0, gezahlt - zahlung_auf_schuld), 2)
             if spende > 0:
                 self.app._session_einzahlung(spende, f"{datum} - Spende von {player}")
-                gesamt_spenden += spende
+                gesamt_zahlungen += spende
+
+            mitglieder[player] = player_data
+            if player in self.app.players:
+                self.app.players[player]["offene_zahlung"] = player_data["offene_zahlung"]
+
+        DatenHandler.speichern_mitglieder(mitglieder)
+        self.app.kasse.speichere_kasse()
 
         # FIX: get_bahngebuehr() statt manueller key-Suche mit zwei Varianten
         bahn = self.app.kasse.get_bahngebuehr()
         if bahn > 0:
             self.app._session_auszahlung(bahn, f"{datum} - Bahngebühr")
 
-        info_summe = round(gesamt_strafen + gesamt_spenden + startgeld_info, 2)
+        info_summe = round(gesamt_zahlungen + startgeld_info, 2)
         if info_summe > 0:
             self.app.kasse.einzahlung(info_summe, f"{datum} - Einnahmen vom Spieltag")
 
@@ -217,10 +243,13 @@ class BillingWindow:
 
         try:
             archivierte_spieler = {p: self.app.players[p] for p in self.app.players}
+            spieltag_transaktionen = list(
+                self.app.kasse.kasse.get("Transaktionen", [])[archive_start_index:]
+            )
             DatenHandler.archivieren_spiel({
                 "datum":        datum,
                 "players":      archivierte_spieler,
-                "transaktionen": list(self.app.kasse.kasse.get("Transaktionen", [])),
+                "transaktionen": spieltag_transaktionen,
             })
         except Exception as e:
             logging.error(f"Fehler beim Archivieren: {e}")
