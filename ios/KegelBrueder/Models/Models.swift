@@ -60,12 +60,15 @@ struct KasseFile: Codable {
     }
 }
 
-struct HistorieEntry: Codable, Identifiable {
+struct HistorieEntry: Codable, Identifiable, Hashable {
     var id: String { datum }
     var datum: String
     var players: [String: PlayerData]
     var transaktionen: [String]
     var spieler_reihenfolge: [String]?
+
+    func hash(into hasher: inout Hasher) { hasher.combine(datum) }
+    static func == (lhs: HistorieEntry, rhs: HistorieEntry) -> Bool { lhs.datum == rhs.datum }
 }
 
 struct AppLockFile: Codable {
