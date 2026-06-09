@@ -284,8 +284,11 @@ class AppViewModel: ObservableObject {
                     result.append(contentsOf: rest)
                     result.append(mitMaxPumpen[0])
                 } else {
-                    // True tie – add as-is (tiebreak must be done separately)
-                    result.append(contentsOf: gruppe)
+                    // Resolve with tiebreak punkte if available, otherwise keep order stable
+                    let byTiebreak = gruppe.sorted {
+                        (tiebreakExtras[$0.name]?.punkte ?? 0) > (tiebreakExtras[$1.name]?.punkte ?? 0)
+                    }
+                    result.append(contentsOf: byTiebreak)
                 }
             }
             i = j
@@ -443,6 +446,42 @@ class AppViewModel: ObservableObject {
         m.players.removeValue(forKey: name)
         store.speichereMitglieder(m)
         mitglieder = m.players
+    }
+
+    // MARK: - Tiebreak
+
+    func hasTrueTie() -> Bool { !getTiedPlayers().isEmpty }
+
+    func getTiedPlayers() -> [String] {
+        let sorted = players.sorted { $0.summe > $1.summe }
+        guard sorted.count >= 2 else { return [] }
+
+        // Find largest group with same summe
+        var i = 0
+        while i < sorted.count {
+            var j = i
+            while j < sorted.count && sorted[j].summe == sorted[i].summe { j += 1 }
+            let gruppe = Array(sorted[i..<j])
+            if gruppe.count >= 2 {
+                // Check if pumpen also equal (real tie, not resolved by pumpen)
+                let pumpenCounts = gruppe.map { $0.pumpen + (tiebreakExtras[$0.name]?.pumpen ?? 0) }
+                let allSamePumpen = Set(pumpenCounts).count == 1
+                if allSamePumpen {
+                    return gruppe.map { $0.name }
+                }
+            }
+            i = j
+        }
+        return []
+    }
+
+    func addTiebreakStats(name: String, pumpen: Int, neuner: Int, kranz: Int, punkte: Int) {
+        var extra = tiebreakExtras[name] ?? TiebreakExtra()
+        extra.pumpen += pumpen
+        extra.neuner += neuner
+        extra.kranz  += kranz
+        extra.punkte += punkte
+        tiebreakExtras[name] = extra
     }
 
     // MARK: - Settings

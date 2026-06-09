@@ -42,7 +42,7 @@ struct GameSessionView: View {
             }
             Spacer()
             Button {
-                vm.activeSheet = .billing
+                vm.activeSheet = vm.hasTrueTie() ? .tiebreak : .billing
             } label: {
                 Label("Abrechnung", systemImage: "eurosign")
             }

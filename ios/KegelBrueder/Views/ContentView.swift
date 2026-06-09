@@ -17,7 +17,7 @@ struct ContentView: View {
                         }
 
                         Button(role: .destructive) {
-                            vm.activeSheet = .billing
+                            vm.activeSheet = vm.hasTrueTie() ? .tiebreak : .billing
                         } label: {
                             Label("Abrechnung", systemImage: "eurosign.circle")
                         }
@@ -122,7 +122,8 @@ struct ContentView: View {
             ArchiveView()
                 .environmentObject(vm)
         case .tiebreak:
-            EmptyView()
+            TiebreakView()
+                .environmentObject(vm)
         }
     }
 }
