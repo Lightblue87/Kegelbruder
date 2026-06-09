@@ -101,8 +101,8 @@ struct PlayerRowView: View {
                 }
                 if player.typ == "Gast" {
                     KBPill("Gast", tone: .guest)
-                } else if player.offen > 0 {
-                    Text(String(format: "Offen %.2f €", player.offen))
+                } else if player.offene_zahlung > 0 {
+                    Text(String(format: "Offen %.2f €", player.offene_zahlung))
                         .font(.system(size: 12))
                         .foregroundColor(.kbDanger)
                 }
