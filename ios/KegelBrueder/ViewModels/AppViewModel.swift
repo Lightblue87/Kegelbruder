@@ -147,6 +147,40 @@ class AppViewModel: ObservableObject {
         mitglieder = aktuelleMitglieder.players
     }
 
+    // Rollback start fees when navigating back from PlayerSortView to AttendanceView
+    func rollbackStartgebuehren() {
+        guard !preSessionSchulden.isEmpty else { return }
+
+        var aktualisierteKasse = kasse
+        for tx in sessionTx.reversed() {
+            if tx.kind == "einzahlung" {
+                aktualisierteKasse.Kassenstand = max(0, aktualisierteKasse.Kassenstand - tx.betrag)
+            } else {
+                aktualisierteKasse.Kassenstand += tx.betrag
+            }
+            if let idx = aktualisierteKasse.Transaktionen.lastIndex(of: tx.text) {
+                aktualisierteKasse.Transaktionen.remove(at: idx)
+            }
+        }
+        kasse = aktualisierteKasse
+        store.speichereKasse(kasse)
+
+        var m = store.ladeMitglieder()
+        for (name, schuld) in preSessionSchulden {
+            if var p = m.players[name] {
+                p.offene_zahlung = schuld
+                m.players[name] = p
+            }
+        }
+        store.speichereMitglieder(m)
+        mitglieder = m.players
+
+        sessionTx = []
+        preSessionSchulden = [:]
+        pendingAttendees = []
+        pendingGäste = []
+    }
+
     // Called after sort – start actual game
     func spielStarten(orderedNames: [String], gäste: [Player]) {
         var aktuelleMitglieder = store.ladeMitglieder()
@@ -290,15 +324,12 @@ class AppViewModel: ObservableObject {
         store.speichereKasse(kasse)
 
         // Archiviere Spiel
-        var historic = store.ladeHistorie()
-        let entry = HistorieEntry(
+        store.archivierSpiel(
             datum: datum,
             players: Dictionary(uniqueKeysWithValues: players.map { ($0.name, $0.toPlayerData()) }),
             transaktionen: kasse.Transaktionen,
-            spieler_reihenfolge: players.map { $0.name }
+            reihenfolge: players.map { $0.name }
         )
-        historic.append(entry)
-        store.speichereHistorie(historic)
 
         // Reset game state
         abgerechnet = true
@@ -334,7 +365,10 @@ class AppViewModel: ObservableObject {
         // Restore pre-session debts
         var aktuelleMitglieder = store.ladeMitglieder()
         for (name, schuld) in preSessionSchulden {
-            aktuelleMitglieder.players[name]?.offene_zahlung = schuld
+            if var p = aktuelleMitglieder.players[name] {
+                p.offene_zahlung = schuld
+                aktuelleMitglieder.players[name] = p
+            }
         }
         store.speichereMitglieder(aktuelleMitglieder)
         mitglieder = aktuelleMitglieder.players
