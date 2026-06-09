@@ -84,8 +84,10 @@ struct TiebreakView: View {
                 .foregroundColor(.kbTextSecondary)
             Spacer()
             Button {
-                vm.activeSheet = .billing
                 dismiss()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    vm.activeSheet = .billing
+                }
             } label: {
                 Label("Zur Abrechnung", systemImage: "eurosign.circle.fill")
                     .font(.headline)
@@ -116,7 +118,7 @@ struct TiebreakView: View {
             )
         }
 
-        // Determine winner: highest cumulative punkte, tiebreak by fewest pumpen
+        // Determine winner: highest cumulative punkte, secondary: fewest cumulative pumpen
         let kumuliert: [(name: String, punkte: Int, pumpen: Int)] = inputs.map { inp in
             let extra = vm.tiebreakExtras[inp.name] ?? TiebreakExtra()
             return (name: inp.name, punkte: extra.punkte, pumpen: extra.pumpen)
@@ -128,9 +130,16 @@ struct TiebreakView: View {
         if vorne.count == 1 {
             ergebnis = vorne[0].name
         } else {
-            // Still tied – next round
-            runde += 1
-            inputs = inputs.map { PlayerInput(name: $0.name) }
+            // Same punkte — fewer pumpen wins (consistent with resolveRanking)
+            let minPumpen = vorne.map { $0.pumpen }.min() ?? 0
+            let mitMinPumpen = vorne.filter { $0.pumpen == minPumpen }
+            if mitMinPumpen.count == 1 {
+                ergebnis = mitMinPumpen[0].name
+            } else {
+                // Truly tied – play another round
+                runde += 1
+                inputs = inputs.map { PlayerInput(name: $0.name) }
+            }
         }
     }
 }

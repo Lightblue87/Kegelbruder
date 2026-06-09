@@ -185,8 +185,8 @@ class AppViewModel: ObservableObject {
     func spielStarten(orderedNames: [String], gäste: [Player]) {
         var aktuelleMitglieder = store.ladeMitglieder()
 
-        // Add guests to mitglieder temporarily
-        for gast in gäste {
+        // Add guests: only insert if not already in mitglieder (preserves known Gast data)
+        for gast in gäste where aktuelleMitglieder.players[gast.name] == nil {
             aktuelleMitglieder.players[gast.name] = gast.toPlayerData()
         }
         store.speichereMitglieder(aktuelleMitglieder)
@@ -420,32 +420,30 @@ class AppViewModel: ObservableObject {
     // MARK: - Player management
 
     func spielerHinzufügen(name: String, typ: String, offeneZahlung: Double) {
-        var m = store.ladeMitglieder()
+        var updated = mitglieder
         var pd = PlayerData(typ: typ)
         pd.offene_zahlung = offeneZahlung
-        m.players[name] = pd
-        store.speichereMitglieder(m)
-        mitglieder = m.players
+        updated[name] = pd
+        mitglieder = updated
+        store.speichereMitglieder(MitgliederFile(players: updated))
     }
 
     func spielerBearbeiten(alterName: String, neuerName: String, typ: String, offeneZahlung: Double) {
-        var m = store.ladeMitglieder()
-        var pd = m.players[alterName] ?? PlayerData(typ: typ)
+        var updated = mitglieder
+        var pd = updated[alterName] ?? PlayerData(typ: typ)
         pd.typ = typ
         pd.offene_zahlung = offeneZahlung
-        if alterName != neuerName {
-            m.players.removeValue(forKey: alterName)
-        }
-        m.players[neuerName] = pd
-        store.speichereMitglieder(m)
-        mitglieder = m.players
+        if alterName != neuerName { updated.removeValue(forKey: alterName) }
+        updated[neuerName] = pd
+        mitglieder = updated
+        store.speichereMitglieder(MitgliederFile(players: updated))
     }
 
     func spielerLöschen(name: String) {
-        var m = store.ladeMitglieder()
-        m.players.removeValue(forKey: name)
-        store.speichereMitglieder(m)
-        mitglieder = m.players
+        var updated = mitglieder
+        updated.removeValue(forKey: name)
+        mitglieder = updated
+        store.speichereMitglieder(MitgliederFile(players: updated))
     }
 
     // MARK: - Tiebreak

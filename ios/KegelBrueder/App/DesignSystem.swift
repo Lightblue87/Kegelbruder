@@ -1,37 +1,76 @@
 import SwiftUI
 
+// MARK: - Adaptive color helpers
+
+private extension UIColor {
+    convenience init(hex: String, alpha: CGFloat = 1) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let r, g, b: UInt64
+        switch hex.count {
+        case 6: (r, g, b) = (int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        default: (r, g, b) = (0, 0, 0)
+        }
+        self.init(red: Double(r)/255, green: Double(g)/255, blue: Double(b)/255, alpha: Double(alpha))
+    }
+}
+
+private func kb(_ light: String, _ dark: String, alpha: CGFloat = 1) -> Color {
+    Color(UIColor { tc in
+        UIColor(hex: tc.userInterfaceStyle == .dark ? dark : light, alpha: alpha)
+    })
+}
+
+private func kbA(light: String, dark: String, lightAlpha: CGFloat = 1, darkAlpha: CGFloat) -> Color {
+    Color(UIColor { tc in
+        tc.userInterfaceStyle == .dark
+            ? UIColor(hex: dark, alpha: darkAlpha)
+            : UIColor(hex: light, alpha: lightAlpha)
+    })
+}
+
 // MARK: - Color Tokens
 
 extension Color {
     // Brand blue
-    static let kbPrimary      = Color(hex: "#4285f4")
-    static let kbPrimaryStrong = Color(hex: "#3367d6")
-    static let kbPrimaryTint  = Color(hex: "#e0eaff")
-    static let kbPrimaryDeep  = Color(hex: "#1b3a8f")
+    static let kbPrimary       = kb("#4285f4", "#4f93ff")
+    static let kbPrimaryStrong = kb("#3367d6", "#6ea6ff")
+    static let kbPrimaryTint   = kbA(light: "#e0eaff", dark: "#4f93ff", darkAlpha: 0.18)
+    static let kbPrimaryDeep   = kb("#1b3a8f", "#6ea6ff")
 
     // Brass / winner gold
-    static let kbBrass400 = Color(hex: "#d8a93e")
-    static let kbBrass500 = Color(hex: "#c7922a")
-    static let kbBrass600 = Color(hex: "#a6781f")
+    static let kbBrass400 = kb("#d8a93e", "#e8b84f")
+    static let kbBrass500 = kb("#c7922a", "#d8a93e")
+    static let kbBrass600 = kb("#a6781f", "#c7922a")
 
     // Scoring categories
-    static let kbPumpe  = Color(hex: "#e5484d")  // red  – Pumpe / Gutter
-    static let kbNeuner = Color(hex: "#4285f4")  // blue – 9er
-    static let kbKranz  = Color(hex: "#2e9e5b")  // green – Kranz
-    static let kbGast   = Color(hex: "#f5a524")  // orange – Gast
+    static let kbPumpe  = kb("#e5484d", "#ff6168")
+    static let kbNeuner = kb("#4285f4", "#4f93ff")
+    static let kbKranz  = kb("#2e9e5b", "#3ab26a")
+    static let kbGast   = kb("#f5a524", "#f7b545")
 
     // Status
-    static let kbSuccess    = Color(hex: "#2e9e5b")
-    static let kbSuccessBg  = Color(hex: "#d8f1e1")
-    static let kbDanger     = Color(hex: "#e5484d")
-    static let kbDangerBg   = Color(hex: "#fbdcdd")
-    static let kbWarning    = Color(hex: "#f5a524")
-    static let kbWarningBg  = Color(hex: "#fde9cc")
+    static let kbSuccess   = kb("#2e9e5b", "#3ab26a")
+    static let kbSuccessBg = kbA(light: "#d8f1e1", dark: "#3ab26a", darkAlpha: 0.20)
+    static let kbDanger    = kb("#e5484d", "#ff6168")
+    static let kbDangerBg  = kbA(light: "#fbdcdd", dark: "#ff6168", darkAlpha: 0.20)
+    static let kbWarning   = kb("#f5a524", "#f7b545")
+    static let kbWarningBg = kbA(light: "#fde9cc", dark: "#f7b545", darkAlpha: 0.20)
 
-    // Text
-    static let kbTextSecondary = Color(hex: "#6b7888")
-    static let kbTextTertiary  = Color(hex: "#97a3b6")
+    // Text (semantic — secondary/tertiary adapt automatically)
+    static let kbTextSecondary = Color(UIColor { tc in
+        tc.userInterfaceStyle == .dark
+            ? UIColor(white: 0.922, alpha: 0.60)   // rgba(235,235,245,0.60)
+            : UIColor(hex: "#6b7888")
+    })
+    static let kbTextTertiary = Color(UIColor { tc in
+        tc.userInterfaceStyle == .dark
+            ? UIColor(white: 0.922, alpha: 0.35)   // rgba(235,235,245,0.35)
+            : UIColor(hex: "#97a3b6")
+    })
 
+    // Legacy hex init (kept for one-off uses)
     init(hex: String) {
         let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
         var int: UInt64 = 0
@@ -94,10 +133,10 @@ struct KBPill: View {
     private var fg: Color {
         switch tone {
         case .primary: return .kbPrimaryStrong
-        case .success: return Color(hex: "#247a47")
-        case .danger:  return Color(hex: "#c13438")
-        case .guest:   return Color(hex: "#cf871a")
-        case .gold:    return Color(hex: "#7a5a12")
+        case .success: return .kbSuccess
+        case .danger:  return .kbDanger
+        case .guest:   return .kbGast
+        case .gold:    return .kbBrass600
         case .neutral: return .kbTextSecondary
         }
     }
@@ -108,7 +147,7 @@ struct KBPill: View {
         case .success: return .kbSuccessBg
         case .danger:  return .kbDangerBg
         case .guest:   return .kbWarningBg
-        case .gold:    return Color(hex: "#f1dca5")
+        case .gold:    return kbA(light: "#d8a93e", dark: "#e8b84f", lightAlpha: 0.18, darkAlpha: 0.22)
         case .neutral: return Color(UIColor.secondarySystemBackground)
         }
     }
@@ -149,5 +188,132 @@ struct KBKassenstandView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
+    }
+}
+
+// MARK: - Double formatting
+
+extension Double {
+    var kbMoney: String { String(format: "%.2f €", self) }
+}
+
+// MARK: - Page background
+
+struct KBPageBackground: View {
+    var body: some View {
+        Color(UIColor.systemGroupedBackground)
+            .ignoresSafeArea()
+    }
+}
+
+// MARK: - Screen container (scrollable, centered, max-width)
+
+struct KBScreen<Content: View>: View {
+    var maxWidth: CGFloat = 800
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                content()
+            }
+            .padding(.horizontal, 20)
+            .padding(.vertical, 20)
+            .frame(maxWidth: maxWidth)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
+    }
+}
+
+// MARK: - Screen title
+
+struct KBScreenTitle: View {
+    let title: String
+    var subtitle: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 34, weight: .bold))
+                .foregroundColor(.primary)
+            if let sub = subtitle {
+                Text(sub)
+                    .font(.subheadline)
+                    .foregroundColor(.kbTextSecondary)
+            }
+        }
+        .padding(.bottom, 18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Group box (card with optional header)
+
+struct KBGroupBox<Content: View>: View {
+    var header: String? = nil
+    @ViewBuilder let content: () -> Content
+
+    init(header: String? = nil, @ViewBuilder content: @escaping () -> Content) {
+        self.header = header
+        self.content = content
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let h = header {
+                Text(h.uppercased())
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundColor(.kbTextSecondary)
+                    .tracking(0.72)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 7)
+            }
+            VStack(spacing: 0) {
+                content()
+            }
+            .background(Color(UIColor.secondarySystemGroupedBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .padding(.bottom, 20)
+    }
+}
+
+// MARK: - List row
+
+struct KBRow<Leading: View, Trailing: View>: View {
+    @ViewBuilder let leading: () -> Leading
+    @ViewBuilder let trailing: () -> Trailing
+
+    init(@ViewBuilder _ leading: @escaping () -> Leading,
+         @ViewBuilder trailing: @escaping () -> Trailing) {
+        self.leading = leading
+        self.trailing = trailing
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            leading()
+            Spacer(minLength: 8)
+            trailing()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+}
+
+extension KBRow where Trailing == EmptyView {
+    init(@ViewBuilder _ leading: @escaping () -> Leading) {
+        self.leading = leading
+        self.trailing = { EmptyView() }
+    }
+}
+
+// MARK: - Row divider
+
+struct KBRowDivider: View {
+    var body: some View {
+        Divider()
+            .padding(.leading, 16)
     }
 }

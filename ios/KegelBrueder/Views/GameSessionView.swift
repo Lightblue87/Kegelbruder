@@ -189,31 +189,65 @@ struct CounterCell: View {
 
 struct ScoreCell: View {
     @Binding var value: Int
-    @State private var text: String = ""
-    @FocusState private var focused: Bool
 
     var body: some View {
-        TextField("0", text: $text)
-            .keyboardType(.numberPad)
-            .multilineTextAlignment(.center)
-            .font(.system(size: 16))
-            .monospacedDigit()
-            .focused($focused)
-            .onAppear { text = value > 0 ? "\(value)" : "" }
-            .onChange(of: focused) { isFocused in
-                if !isFocused {
-                    if let v = Int(text), v >= 0 {
-                        value = v
-                    } else {
-                        text = value > 0 ? "\(value)" : ""
-                    }
-                }
-            }
-            .onChange(of: value) { newVal in
-                if !focused { text = newVal > 0 ? "\(newVal)" : "" }
-            }
-            .padding(6)
+        NumberInputField(value: $value)
+            .frame(width: 48, height: 32)
             .background(Color(UIColor.secondarySystemGroupedBackground))
             .cornerRadius(8)
+    }
+}
+
+// UITextField wrapper — keyboardType is set at the UIKit level and never changes,
+// so repeated taps always show the number pad regardless of SwiftUI re-renders.
+private struct NumberInputField: UIViewRepresentable {
+    @Binding var value: Int
+
+    func makeUIView(context: Context) -> UITextField {
+        let field = UITextField()
+        field.keyboardType = .numberPad
+        field.textAlignment = .center
+        field.font = .monospacedDigitSystemFont(ofSize: 16, weight: .regular)
+        field.placeholder = "0"
+        field.delegate = context.coordinator
+        field.addTarget(context.coordinator,
+                        action: #selector(Coordinator.editingChanged(_:)),
+                        for: .editingChanged)
+        return field
+    }
+
+    func updateUIView(_ field: UITextField, context: Context) {
+        // Only update text when the field is not being edited to avoid cursor jumps
+        if !field.isFirstResponder {
+            field.text = value > 0 ? "\(value)" : ""
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(value: $value) }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        @Binding var value: Int
+        init(value: Binding<Int>) { _value = value }
+
+        @objc func editingChanged(_ field: UITextField) {
+            // Restrict to digits only
+            if let text = field.text {
+                let digits = text.filter { $0.isNumber }
+                if digits != text { field.text = digits }
+            }
+        }
+
+        func textFieldDidEndEditing(_ field: UITextField) {
+            if let text = field.text, let v = Int(text), v >= 0 {
+                value = v
+            } else {
+                field.text = value > 0 ? "\(value)" : ""
+            }
+        }
+
+        func textFieldShouldReturn(_ field: UITextField) -> Bool {
+            field.resignFirstResponder()
+            return true
+        }
     }
 }

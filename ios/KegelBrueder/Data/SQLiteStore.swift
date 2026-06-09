@@ -25,7 +25,9 @@ final class SQLiteStore {
     // MARK: - Schema
 
     private func createSchema() throws {
-        try exec("""
+        // sqlite3_prepare_v2 only compiles the first statement in a multi-statement string.
+        // Use sqlite3_exec which processes all statements in one call.
+        let sql = """
         CREATE TABLE IF NOT EXISTS mitglieder (
             name TEXT PRIMARY KEY,
             typ TEXT NOT NULL DEFAULT 'Stamm',
@@ -86,7 +88,13 @@ final class SQLiteStore {
             seit TEXT NOT NULL,
             plattform TEXT NOT NULL
         );
-        """)
+        """
+        var errmsg: UnsafeMutablePointer<CChar>?
+        guard sqlite3_exec(db, sql, nil, nil, &errmsg) == SQLITE_OK else {
+            let msg = errmsg.map { String(cString: $0) } ?? "unknown"
+            sqlite3_free(errmsg)
+            throw SQLiteError.stepFailed(msg)
+        }
     }
 
     private func insertDefaultKasse() throws {
@@ -265,7 +273,7 @@ final class SQLiteStore {
                 params: [.int(spielId)]
             ) { row in
                 players[row.text(2)] = PlayerData(
-                    typ: row.text(3) ?? "Stamm",
+                    typ: row.text(3),
                     punkte: [row.int(4), row.int(5), row.int(6), row.int(7)],
                     offene_zahlung: row.real(11),
                     pumpen: row.int(8), neuner: row.int(9), kranz: row.int(10),

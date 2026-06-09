@@ -6,7 +6,16 @@ struct KegelBruederApp: App {
     @StateObject private var store = DataStore.shared
     @StateObject private var sync  = SyncManager.shared
 
+    @AppStorage("appColorScheme") private var colorSchemeRaw: Int = 0
     @Environment(\.scenePhase) private var scenePhase
+
+    private var preferredColorScheme: ColorScheme? {
+        switch colorSchemeRaw {
+        case 1: return .dark
+        case 2: return .light
+        default: return nil
+        }
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -19,6 +28,7 @@ struct KegelBruederApp: App {
                         .environmentObject(vm)
                         .environmentObject(store)
                         .environmentObject(sync)
+                        .preferredColorScheme(preferredColorScheme)
                         .alert("App bereits geöffnet", isPresented: $vm.showLockWarning) {
                             Button("Übernehmen", role: .destructive) {
                                 vm.onLockOverride?()
@@ -39,7 +49,7 @@ struct KegelBruederApp: App {
                     vm.prüfeLockUndStarte { vm.laden() }
                 }
             }
-            .onChange(of: scenePhase) { phase in
+            .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active:
                     if store.iCloudAvailable {

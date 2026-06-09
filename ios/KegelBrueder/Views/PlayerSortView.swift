@@ -39,8 +39,10 @@ struct PlayerSortView: View {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Zurück") {
                         vm.rollbackStartgebuehren()
-                        vm.activeSheet = .attendance
                         dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            vm.activeSheet = .attendance
+                        }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {

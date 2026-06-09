@@ -4,15 +4,14 @@ struct ContentView: View {
     @EnvironmentObject var vm: AppViewModel
     @EnvironmentObject var store: DataStore
 
+    @State private var selectedItem: String? = nil
+
     var body: some View {
         NavigationSplitView {
-            List {
+            List(selection: $selectedItem) {
                 Section("Spiel") {
                     if vm.gameRunning {
-                        NavigationLink {
-                            GameSessionView()
-                                .environmentObject(vm)
-                        } label: {
+                        NavigationLink(value: "game") {
                             Label("Laufendes Spiel", systemImage: "figure.bowling")
                         }
 
@@ -40,51 +39,57 @@ struct ContentView: View {
                 }
 
                 Section("Verwaltung") {
-                    NavigationLink {
-                        CashManagementView()
-                            .environmentObject(vm)
-                    } label: {
+                    NavigationLink(value: "cash") {
                         Label("Kassenverwaltung", systemImage: "banknote")
                     }
-
-                    NavigationLink {
-                        PlayerManagementView()
-                            .environmentObject(vm)
-                    } label: {
+                    NavigationLink(value: "players") {
                         Label("Spieler verwalten", systemImage: "person.2")
                     }
-
-                    NavigationLink {
-                        ArchiveView()
-                            .environmentObject(vm)
-                    } label: {
+                    NavigationLink(value: "archive") {
                         Label("Archiv", systemImage: "clock.arrow.circlepath")
                     }
                 }
 
                 Section("Einstellungen") {
-                    NavigationLink {
-                        SettingsView()
-                            .environmentObject(vm)
-                    } label: {
-                        Label("Kosten Einstellungen", systemImage: "gearshape")
+                    NavigationLink(value: "settings") {
+                        Label("Einstellungen", systemImage: "gearshape")
                     }
                 }
             }
             .navigationTitle("Kegel Brüder")
             .listStyle(.insetGrouped)
         } detail: {
-            if vm.gameRunning {
-                GameSessionView()
-                    .environmentObject(vm)
-            } else {
-                ReadyScreen {
-                    vm.starteNeuesSpiel()
-                }
-            }
+            detailView
         }
         .sheet(item: $vm.activeSheet) { sheet in
             sheetView(for: sheet)
+        }
+        .onChange(of: vm.gameRunning) { _, running in
+            if running {
+                selectedItem = nil   // jump to GameSessionView in detail
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var detailView: some View {
+        switch selectedItem {
+        case "game":
+            GameSessionView().environmentObject(vm)
+        case "cash":
+            CashManagementView().environmentObject(vm)
+        case "players":
+            PlayerManagementView().environmentObject(vm)
+        case "archive":
+            ArchiveView().environmentObject(vm)
+        case "settings":
+            SettingsView().environmentObject(vm)
+        default:
+            if vm.gameRunning {
+                GameSessionView().environmentObject(vm)
+            } else {
+                ReadyScreen { vm.starteNeuesSpiel() }
+            }
         }
     }
 
@@ -92,31 +97,23 @@ struct ContentView: View {
     func sheetView(for sheet: AppViewModel.AppSheet) -> some View {
         switch sheet {
         case .attendance:
-            AttendanceView()
-                .environmentObject(vm)
+            AttendanceView().environmentObject(vm)
         case .playerSort:
-            PlayerSortView()
-                .environmentObject(vm)
+            PlayerSortView().environmentObject(vm)
         case .game:
             EmptyView()
         case .billing:
-            BillingView()
-                .environmentObject(vm)
+            BillingView().environmentObject(vm)
         case .cash:
-            CashManagementView()
-                .environmentObject(vm)
+            CashManagementView().environmentObject(vm)
         case .players:
-            PlayerManagementView()
-                .environmentObject(vm)
+            PlayerManagementView().environmentObject(vm)
         case .settings:
-            SettingsView()
-                .environmentObject(vm)
+            SettingsView().environmentObject(vm)
         case .archive:
-            ArchiveView()
-                .environmentObject(vm)
+            ArchiveView().environmentObject(vm)
         case .tiebreak:
-            TiebreakView()
-                .environmentObject(vm)
+            TiebreakView().environmentObject(vm)
         }
     }
 }

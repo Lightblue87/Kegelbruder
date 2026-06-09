@@ -4,90 +4,32 @@ struct AttendanceView: View {
     @EnvironmentObject var vm: AppViewModel
     @Environment(\.dismiss) var dismiss
 
-    // Stamm members
+    // Stamm — default false, set explicitly by the user
     @State private var anwesend: [String: Bool] = [:]
     @State private var zahlungen: [String: String] = [:]
 
-    // Guest management
-    @State private var gastName: String = ""
-    @State private var gäste: [Player] = []
+    // Known guests from DB (typ == "Gast") — default false
+    @State private var gastAnwesend: [String: Bool] = [:]
+    @State private var gastZahlungen: [String: String] = [:]
+
+    // New guests added this session — toggle defaults to true
+    @State private var neueGäste: [NeuerGast] = []
+    @State private var neuerGastName: String = ""
 
     var stammMitglieder: [(String, PlayerData)] {
-        vm.mitglieder
-            .filter { $0.value.typ == "Stamm" }
-            .sorted { $0.key < $1.key }
+        vm.mitglieder.filter { $0.value.typ == "Stamm" }.sorted { $0.key < $1.key }
+    }
+
+    var gastMitglieder: [(String, PlayerData)] {
+        vm.mitglieder.filter { $0.value.typ == "Gast" }.sorted { $0.key < $1.key }
     }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Stamm-Mitglieder") {
-                    ForEach(stammMitglieder, id: \.0) { name, data in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(name).font(.headline)
-                                if data.offene_zahlung > 0 {
-                                    Text("Offen: \(String(format: "%.2f", data.offene_zahlung)) €")
-                                        .font(.caption)
-                                        .foregroundColor(.red)
-                                }
-                            }
-
-                            Spacer()
-
-                            Toggle("", isOn: Binding(
-                                get: { anwesend[name] ?? true },
-                                set: { anwesend[name] = $0 }
-                            ))
-                            .labelsHidden()
-                        }
-
-                        if anwesend[name] ?? true {
-                            HStack {
-                                Text("Zahlung heute:")
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                TextField("0,00 €", text: Binding(
-                                    get: { zahlungen[name] ?? "" },
-                                    set: { zahlungen[name] = $0 }
-                                ))
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 100)
-                            }
-                        }
-                    }
-                }
-
-                Section("Gäste") {
-                    ForEach(gäste) { gast in
-                        HStack {
-                            Text(gast.name)
-                            Spacer()
-                            Text("Gast").foregroundColor(.secondary)
-                        }
-                    }
-                    .onDelete { idx in gäste.remove(atOffsets: idx) }
-
-                    HStack {
-                        TextField("Gast-Name", text: $gastName)
-                        Button("Hinzufügen") {
-                            let name = gastName.trimmingCharacters(in: .whitespaces)
-                            guard !name.isEmpty else { return }
-                            gäste.append(Player(name: name, typ: "Gast"))
-                            gastName = ""
-                        }
-                        .disabled(gastName.trimmingCharacters(in: .whitespaces).isEmpty)
-                    }
-                }
-
-                Section("Übersicht") {
-                    let anwesendCount = anwesend.filter { $0.value }.count + gäste.count
-                    let abwesendCount = stammMitglieder.count - anwesend.filter { $0.value }.count
-                    LabeledContent("Anwesend", value: "\(anwesendCount)")
-                    LabeledContent("Abwesend (Strafe \(String(format: "%.2f", vm.kasse.Strafe_Stamm)) €)", value: "\(abwesendCount)")
-                    LabeledContent("Startgeld je Spieler", value: "\(String(format: "%.2f", vm.kasse.Startgeld)) €")
-                }
+                stammSection
+                gästeSection
+                übersichtSection
             }
             .navigationTitle("Anwesenheit")
             .navigationBarTitleDisplayMode(.large)
@@ -97,46 +39,207 @@ struct AttendanceView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Weiter →") { weiter() }
+                        .font(.headline)
+                        .disabled(anzahlAnwesend == 0)
                 }
             }
             .onAppear { initialisieren() }
         }
     }
 
+    // MARK: - Sections
+
+    private var stammSection: some View {
+        Section("Stamm-Mitglieder") {
+            ForEach(stammMitglieder, id: \.0) { name, data in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(name).font(.headline)
+                        if data.offene_zahlung > 0 {
+                            Text("Offen: \(String(format: "%.2f", data.offene_zahlung)) €")
+                                .font(.caption).foregroundColor(.red)
+                        }
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { anwesend[name] ?? false },
+                        set: { anwesend[name] = $0 }
+                    )).labelsHidden()
+                }
+
+                if anwesend[name] ?? false {
+                    HStack {
+                        Text("Zahlung heute:").foregroundColor(.secondary)
+                        Spacer()
+                        TextField("0,00", text: Binding(
+                            get: { zahlungen[name] ?? "" },
+                            set: { zahlungen[name] = $0 }
+                        ))
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                        Text("€").foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+    }
+
+    private var gästeSection: some View {
+        Section("Gäste") {
+            // Known guests from DB
+            ForEach(gastMitglieder, id: \.0) { name, data in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(name).font(.headline)
+                        if data.offene_zahlung > 0 {
+                            Text("Offen: \(String(format: "%.2f", data.offene_zahlung)) €")
+                                .font(.caption).foregroundColor(.red)
+                        }
+                    }
+                    Spacer()
+                    Toggle("", isOn: Binding(
+                        get: { gastAnwesend[name] ?? false },
+                        set: { gastAnwesend[name] = $0 }
+                    )).labelsHidden()
+                }
+
+                if gastAnwesend[name] ?? false {
+                    HStack {
+                        Text("Zahlung heute:").foregroundColor(.secondary)
+                        Spacer()
+                        TextField("0,00", text: Binding(
+                            get: { gastZahlungen[name] ?? "" },
+                            set: { gastZahlungen[name] = $0 }
+                        ))
+                        .keyboardType(.decimalPad)
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 80)
+                        Text("€").foregroundColor(.secondary)
+                    }
+                }
+            }
+
+            // New guests added this session (toggle active by default)
+            ForEach($neueGäste) { $gast in
+                HStack {
+                    Text(gast.name).font(.headline)
+                    KBPill("Neu", tone: .guest)
+                    Spacer()
+                    Toggle("", isOn: $gast.selected).labelsHidden()
+                }
+
+                if gast.selected {
+                    HStack {
+                        Text("Zahlung heute:").foregroundColor(.secondary)
+                        Spacer()
+                        TextField("0,00", text: $gast.zahlung)
+                            .keyboardType(.decimalPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                        Text("€").foregroundColor(.secondary)
+                    }
+                }
+            }
+            .onDelete { idx in neueGäste.remove(atOffsets: idx) }
+
+            HStack {
+                TextField("Neuer Gast", text: $neuerGastName)
+                Button("Hinzufügen") {
+                    let n = neuerGastName.trimmingCharacters(in: .whitespaces)
+                    guard !n.isEmpty else { return }
+                    neueGäste.append(NeuerGast(name: n))
+                    neuerGastName = ""
+                }
+                .disabled(neuerGastName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    private var übersichtSection: some View {
+        Section("Übersicht") {
+            LabeledContent("Anwesend", value: "\(anzahlAnwesend)")
+            LabeledContent(
+                "Abwesend (Strafe \(String(format: "%.2f", vm.kasse.Strafe_Stamm)) €)",
+                value: "\(stammMitglieder.count - anwesend.filter { $0.value }.count)"
+            )
+            LabeledContent("Startgeld je Spieler", value: "\(String(format: "%.2f", vm.kasse.Startgeld)) €")
+        }
+    }
+
+    // MARK: - Helpers
+
+    private var anzahlAnwesend: Int {
+        anwesend.filter { $0.value }.count
+        + gastAnwesend.filter { $0.value }.count
+        + neueGäste.filter { $0.selected }.count
+    }
+
     private func initialisieren() {
-        for (name, data) in stammMitglieder {
-            if anwesend[name] == nil {
-                anwesend[name] = true
-            }
-            if zahlungen[name] == nil {
-                zahlungen[name] = ""
-            }
-            _ = data
+        for (name, _) in stammMitglieder {
+            if anwesend[name] == nil  { anwesend[name]  = false }
+            if zahlungen[name] == nil { zahlungen[name] = "" }
         }
     }
 
     private func weiter() {
-        // Parse payments
-        var parsedZahlungen: [String: Double] = [:]
-        for (name, str) in zahlungen {
-            let cleaned = str.replacingOccurrences(of: ",", with: ".")
-            parsedZahlungen[name] = Double(cleaned) ?? 0.0
+        // 1. Save new guests to DB so berechneStartgebuehren can process their payments
+        for gast in neueGäste where vm.mitglieder[gast.name] == nil {
+            vm.spielerHinzufügen(name: gast.name, typ: "Gast", offeneZahlung: 0)
         }
 
-        vm.berechneStartgebuehren(anwesend: anwesend, zahlungen: parsedZahlungen)
+        // 2. Merge all attendance and payments
+        var allAnwesend = anwesend
+        for name in gastMitglieder.map(\.0) where gastAnwesend[name] ?? false {
+            allAnwesend[name] = true
+        }
+        for gast in neueGäste where gast.selected {
+            allAnwesend[gast.name] = true
+        }
 
-        // Build player list: anwesende Stamm + Gäste
+        var parsedZahlungen: [String: Double] = [:]
+        for (name, str) in zahlungen          { parsedZahlungen[name] = parse(str) }
+        for (name, str) in gastZahlungen
+            where gastAnwesend[name] ?? false  { parsedZahlungen[name] = parse(str) }
+        for gast in neueGäste where gast.selected {
+            parsedZahlungen[gast.name] = parse(gast.zahlung)
+        }
+
+        vm.berechneStartgebuehren(anwesend: allAnwesend, zahlungen: parsedZahlungen)
+
+        // 3. Build player lists
         let anwesendeSpieler = stammMitglieder
-            .filter { anwesend[$0.0] ?? true }
-            .map { $0.0 }
+            .filter { anwesend[$0.0] ?? false }
+            .map(\.0)
 
-        // Pass to sort view
-        let alle = anwesendeSpieler + gäste.map { $0.name }
-        vm.activeSheet = .playerSort
+        let selectedKnownGäste: [Player] = gastMitglieder
+            .filter { gastAnwesend[$0.0] ?? false }
+            .map { Player(name: $0.0, data: $0.1) }
 
-        // Store temporary guest data & ordered list for sort view
-        vm.pendingAttendees = alle
-        vm.pendingGäste = gäste
+        let selectedNeueGäste: [Player] = neueGäste
+            .filter { $0.selected }
+            .map { Player(name: $0.name, typ: "Gast") }
+
+        let alleGäste = selectedKnownGäste + selectedNeueGäste
+        vm.pendingAttendees = anwesendeSpieler + alleGäste.map(\.name)
+        vm.pendingGäste     = alleGäste
+
+        // 4. Dismiss first, then open PlayerSortView
+        //    (dismiss() sets activeSheet = nil; we reassign after the frame completes)
         dismiss()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            vm.activeSheet = .playerSort
+        }
     }
+
+    private func parse(_ str: String) -> Double {
+        Double(str.replacingOccurrences(of: ",", with: ".")) ?? 0.0
+    }
+}
+
+private struct NeuerGast: Identifiable {
+    let id = UUID()
+    var name: String
+    var selected: Bool = true
+    var zahlung: String = ""
 }
