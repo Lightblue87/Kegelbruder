@@ -23,7 +23,7 @@ from datetime import datetime
 from tkinter import messagebox, ttk
 
 from cashbox import Kasse
-from config import DATA_FILE, HISTORIE_FILE
+from config import get_data_path
 from data_handler import DatenHandler
 from gui.archive import ArchiveWindow
 from gui.attendance import AttendanceFlow
@@ -272,7 +272,7 @@ class KegelBruederApp:
 
     def lade_letzte_reihenfolge(self):
         try:
-            historie = DatenHandler._safe_read_json(HISTORIE_FILE, [])
+            historie = DatenHandler._safe_read_json(get_data_path("historie"), [])
             if historie:
                 def _to_dt(e):
                     try:
@@ -301,7 +301,7 @@ class KegelBruederApp:
     def save_results(self):
         data = {"players": self.players, "kasse": self.kasse.kasse}
         try:
-            AtomicFileWriter.atomic_write(DATA_FILE, data)
+            AtomicFileWriter.atomic_write(get_data_path("data"), data)
         except Exception as e:
             messagebox.showerror("Fehler", f"Speichern fehlgeschlagen: {e}")
 

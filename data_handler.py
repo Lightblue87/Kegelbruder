@@ -4,12 +4,7 @@ import os
 import shutil
 import threading
 
-from config import (
-    DATA_FILE,
-    AKTUELLES_SPIEL,
-    HISTORIE_FILE,
-    MITGLIEDER_DATEI,
-)
+from config import get_data_path
 from storage import AtomicFileWriter
 
 
@@ -45,31 +40,31 @@ class DatenHandler:
 
     @staticmethod
     def laden_mitglieder():
-        return DatenHandler._safe_read_json(MITGLIEDER_DATEI, {"players": {}})
+        return DatenHandler._safe_read_json(get_data_path("mitglieder"), {"players": {}})
 
     @staticmethod
     def speichern_mitglieder(players):
         try:
             data = {"players": players}
-            AtomicFileWriter.atomic_write(MITGLIEDER_DATEI, data)
+            AtomicFileWriter.atomic_write(get_data_path("mitglieder"), data)
         except Exception as e:
             logging.error(f"Speichern Mitglieder fehlgeschlagen: {e}")
 
     @staticmethod
     def laden():
-        return DatenHandler._safe_read_json(DATA_FILE, {"players": {}, "kasse": {}})
+        return DatenHandler._safe_read_json(get_data_path("data"), {"players": {}, "kasse": {}})
 
     @staticmethod
     def laden_spiel():
         return DatenHandler._safe_read_json(
-            AKTUELLES_SPIEL,
+            get_data_path("spiel"),
             {"players": {}, "runde": 0, "abgerechnet": False}
         )
 
     @staticmethod
     def speichern_spiel(data):
         try:
-            AtomicFileWriter.atomic_write(AKTUELLES_SPIEL, data)
+            AtomicFileWriter.atomic_write(get_data_path("spiel"), data)
         except Exception as e:
             logging.error(f"Speichern aktuelles Spiel fehlgeschlagen: {e}")
 
@@ -93,7 +88,7 @@ class DatenHandler:
 
     @staticmethod
     def archivieren_spiel(spieldaten):
-        historie = DatenHandler._safe_read_json(HISTORIE_FILE, [])
+        historie = DatenHandler._safe_read_json(get_data_path("historie"), [])
         if "spieler_reihenfolge" not in spieldaten and "players" in spieldaten:
             spieldaten["spieler_reihenfolge"] = list(spieldaten["players"].keys())
         historie.append(spieldaten)
@@ -104,6 +99,6 @@ class DatenHandler:
             logging.warning("Historie auf letzte 100 Spiele begrenzt")
 
         try:
-            AtomicFileWriter.atomic_write(HISTORIE_FILE, historie)
+            AtomicFileWriter.atomic_write(get_data_path("historie"), historie)
         except Exception as e:
             logging.error(f"Speichern Historie fehlgeschlagen: {e}")

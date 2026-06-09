@@ -12,8 +12,9 @@ import platform
 import socket
 from datetime import datetime, time as dt_time
 
+from config import get_data_path
 
-LOCK_FILE = "kegelbruder.lock"
+LOCK_FILE = "kegelbruder.lock"  # Dateiname; Pfad immer über get_data_path("lock")
 RESET_UHRZEIT = dt_time(1, 0)   # 01:00 Uhr
 
 
@@ -36,10 +37,11 @@ def _lock_ist_abgelaufen(seit_str: str) -> bool:
 
 def lock_lesen() -> dict | None:
     """Gibt den Lock-Inhalt zurück, oder None wenn kein Lock existiert."""
-    if not os.path.exists(LOCK_FILE):
+    pfad = get_data_path("lock")
+    if not os.path.exists(pfad):
         return None
     try:
-        with open(LOCK_FILE, "r", encoding="utf-8") as f:
+        with open(pfad, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception:
         return None
@@ -53,7 +55,7 @@ def lock_setzen():
         "plattform": platform.system(),
     }
     try:
-        with open(LOCK_FILE, "w", encoding="utf-8") as f:
+        with open(get_data_path("lock"), "w", encoding="utf-8") as f:
             json.dump(inhalt, f, indent=2, ensure_ascii=False)
         logging.info(f"Lock gesetzt: {inhalt}")
     except Exception as e:
@@ -63,8 +65,9 @@ def lock_setzen():
 def lock_freigeben():
     """Löscht die Lock-Datei beim sauberen Beenden."""
     try:
-        if os.path.exists(LOCK_FILE):
-            os.remove(LOCK_FILE)
+        pfad = get_data_path("lock")
+        if os.path.exists(pfad):
+            os.remove(pfad)
             logging.info("Lock freigegeben.")
     except Exception as e:
         logging.error(f"Lock konnte nicht gelöscht werden: {e}")

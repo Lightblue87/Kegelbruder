@@ -12,7 +12,7 @@ import tkinter as tk
 from datetime import datetime
 from tkinter import ttk
 
-from config import HISTORIE_FILE
+from config import get_data_path
 from data_handler import DatenHandler
 
 
@@ -24,7 +24,7 @@ class ArchiveWindow:
         win.title("Archiv")
         win.geometry("800x600")
 
-        data = DatenHandler._safe_read_json(HISTORIE_FILE, [])
+        data = DatenHandler._safe_read_json(get_data_path("historie"), [])
         try:
             data = sorted(data, key=lambda e: datetime.strptime(
                 e.get("datum", "01.01.1900"), "%d.%m.%Y"), reverse=True)

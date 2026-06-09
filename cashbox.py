@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 
-from config import DATA_FILE_KASSE
+from config import get_data_path
 from storage import AtomicFileWriter
 
 
@@ -35,9 +35,9 @@ class Kasse:
         )
 
     def lade_kasse(self):
-        if os.path.exists(DATA_FILE_KASSE):
+        if os.path.exists(get_data_path("kasse")):
             try:
-                with open(DATA_FILE_KASSE, "r") as f:
+                with open(get_data_path("kasse"), "r") as f:
                     self.kasse = json.load(f)
             except json.JSONDecodeError:
                 self.speichere_kasse()
@@ -64,7 +64,7 @@ class Kasse:
 
     def speichere_kasse(self):
         try:
-            AtomicFileWriter.atomic_write(DATA_FILE_KASSE, self.kasse)
+            AtomicFileWriter.atomic_write(get_data_path("kasse"), self.kasse)
         except Exception as e:
             logging.error(f"Speichern Kasse fehlgeschlagen: {e}")
 
