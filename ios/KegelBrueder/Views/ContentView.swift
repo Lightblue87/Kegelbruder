@@ -64,10 +64,8 @@ struct ContentView: View {
         .sheet(item: $vm.activeSheet) { sheet in
             sheetView(for: sheet)
         }
-        .onChange(of: vm.gameRunning) { _, running in
-            if running {
-                selectedItem = nil   // jump to GameSessionView in detail
-            }
+        .onChange(of: vm.gameRunning) { _, _ in
+            selectedItem = nil   // start → GameSessionView; stop → ReadyScreen
         }
     }
 

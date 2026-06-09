@@ -112,7 +112,7 @@ class AppViewModel: ObservableObject {
         preSessionSchulden = [:]
         var aktuelleMitglieder = store.ladeMitglieder()
 
-        for (name, player) in aktuelleMitglieder.players where player.typ == "Stamm" {
+        for (name, player) in aktuelleMitglieder.players {
             preSessionSchulden[name] = player.offene_zahlung
         }
 
@@ -272,23 +272,27 @@ class AppViewModel: ObservableObject {
             if gruppe.count == 1 {
                 result.append(gruppe[0])
             } else {
-                // Check pumpen tiebreak
-                let pumpenCounts = gruppe.map { $0.pumpen + (tiebreakExtras[$0.name]?.pumpen ?? 0) }
-                let maxPumpen = pumpenCounts.max() ?? 0
-                let mitMaxPumpen = gruppe.filter {
-                    ($0.pumpen + (tiebreakExtras[$0.name]?.pumpen ?? 0)) == maxPumpen
-                }
-                if mitMaxPumpen.count == 1 {
-                    // Most pumpen → worst rank
-                    let rest = gruppe.filter { $0.name != mitMaxPumpen[0].name }
-                    result.append(contentsOf: rest)
-                    result.append(mitMaxPumpen[0])
-                } else {
-                    // Resolve with tiebreak punkte if available, otherwise keep order stable
+                // If a tiebreak was played for this group, tiebreak punkte take full precedence.
+                // Using pumpen here would penalise the tiebreak winner for gutters scored
+                // during the tiebreak round itself.
+                let hasTiebreakData = gruppe.contains { tiebreakExtras[$0.name] != nil }
+                if hasTiebreakData {
                     let byTiebreak = gruppe.sorted {
                         (tiebreakExtras[$0.name]?.punkte ?? 0) > (tiebreakExtras[$1.name]?.punkte ?? 0)
                     }
                     result.append(contentsOf: byTiebreak)
+                } else {
+                    // Normal pumpen tiebreak (most pumpen → worst rank)
+                    let pumpenCounts = gruppe.map { $0.pumpen }
+                    let maxPumpen = pumpenCounts.max() ?? 0
+                    let mitMaxPumpen = gruppe.filter { $0.pumpen == maxPumpen }
+                    if mitMaxPumpen.count == 1 {
+                        let rest = gruppe.filter { $0.name != mitMaxPumpen[0].name }
+                        result.append(contentsOf: rest)
+                        result.append(mitMaxPumpen[0])
+                    } else {
+                        result.append(contentsOf: gruppe)
+                    }
                 }
             }
             i = j
@@ -461,6 +465,10 @@ class AppViewModel: ObservableObject {
             while j < sorted.count && sorted[j].summe == sorted[i].summe { j += 1 }
             let gruppe = Array(sorted[i..<j])
             if gruppe.count >= 2 {
+                // If tiebreak was already played and resolved by punkte, no further tiebreak needed
+                let tiebreakPunkte = gruppe.map { tiebreakExtras[$0.name]?.punkte ?? 0 }
+                if Set(tiebreakPunkte).count > 1 { i = j; continue }
+
                 // Check if pumpen also equal (real tie, not resolved by pumpen)
                 let pumpenCounts = gruppe.map { $0.pumpen + (tiebreakExtras[$0.name]?.pumpen ?? 0) }
                 let allSamePumpen = Set(pumpenCounts).count == 1
