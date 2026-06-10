@@ -100,7 +100,7 @@ struct SettingsView: View {
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     } else {
-                        Text("1. Link aus iCloud Drive einfügen → „Öffnen" tippt den Ordner in der Files-App an.\n2. Zurück zur App → „Freigegebenen Ordner wählen" → Ordner antippen → fertig.\nDer Zugriff wird einmalig erteilt und danach automatisch wiederhergestellt.")
+                        Text("1. Link aus iCloud Drive einfügen -> \"Öffnen\" tippt den Ordner in der Files-App an.\n2. Zurück zur App -> \"Freigegebenen Ordner wählen\" -> Ordner antippen -> fertig.\nDer Zugriff wird einmalig erteilt und danach automatisch wiederhergestellt.")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
