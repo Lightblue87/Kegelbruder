@@ -23,6 +23,8 @@ class DataStore: ObservableObject {
     private(set) var sqlite: SQLiteStore? = nil
     private var scopedURL: URL? = nil
 
+    var isDatabaseOpen: Bool { sqlite != nil }
+
     private init() {}
 
     // MARK: - Startup

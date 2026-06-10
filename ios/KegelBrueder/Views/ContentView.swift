@@ -16,7 +16,7 @@ struct ContentView: View {
                         }
 
                         Button(role: .destructive) {
-                            vm.activeSheet = vm.hasTrueTie() ? .tiebreak : .billing
+                            vm.abrechnungStarten()
                         } label: {
                             Label("Abrechnung", systemImage: "eurosign.circle")
                         }

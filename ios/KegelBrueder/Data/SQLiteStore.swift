@@ -139,10 +139,10 @@ final class SQLiteStore {
 
     func reduziereOffeneZahlung(name: String, betrag: Double) throws {
         try transaction {
-            let rows = try queryRows("SELECT offene_zahlung FROM mitglieder WHERE name = ?",
-                                     params: [.text(name)])
-            guard let row = rows.first else { return }
-            let neu = max(0.0, row.real(0) - betrag)
+            var current = 0.0
+            try query("SELECT offene_zahlung FROM mitglieder WHERE name = ?",
+                      params: [.text(name)]) { row in current = row.real(0) }
+            let neu = max(0.0, current - betrag)
             try exec("UPDATE mitglieder SET offene_zahlung = ? WHERE name = ?",
                      params: [.real(neu), .text(name)])
         }
@@ -254,12 +254,11 @@ final class SQLiteStore {
     // MARK: - Historie
 
     func ladeHistorie(limit: Int = 100) -> [HistorieEntry] {
-        guard let spiele = try? queryRows(
+        var entries: [HistorieEntry] = []
+        try? query(
             "SELECT id, datum, spieler_reihenfolge FROM historie ORDER BY id DESC LIMIT ?",
             params: [.int(limit)]
-        ) else { return [] }
-
-        return spiele.compactMap { spiel in
+        ) { spiel in
             let spielId = spiel.int(0)
             let datum   = spiel.text(1)
             let reihenfolge = (try? JSONDecoder().decode(
@@ -287,11 +286,12 @@ final class SQLiteStore {
                 params: [.int(spielId)]
             ) { row in transaktionen.append(row.text(0)) }
 
-            return HistorieEntry(
+            entries.append(HistorieEntry(
                 datum: datum, players: players,
                 transaktionen: transaktionen, spieler_reihenfolge: reihenfolge
-            )
+            ))
         }
+        return entries
     }
 
     func archivierSpiel(datum: String, players: [String: PlayerData],
@@ -344,8 +344,6 @@ final class SQLiteStore {
             "INSERT OR REPLACE INTO app_lock (id, geraet, seit, plattform) VALUES (1, ?, ?, ?)",
             params: [.text(geraet), .text(seit), .text(plattform)]
         )
-        try exec("") // flush
-        sqlite3_exec(db, "COMMIT", nil, nil, nil)
     }
 
     func loescheLock() throws {
@@ -384,12 +382,6 @@ final class SQLiteStore {
         while sqlite3_step(stmt) == SQLITE_ROW {
             try handler(Row(stmt: stmt!))
         }
-    }
-
-    func queryRows(_ sql: String, params: [Param] = []) throws -> [Row] {
-        var rows: [Row] = []
-        try query(sql, params: params) { rows.append($0) }
-        return rows
     }
 
     func transaction(_ block: () throws -> Void) throws {

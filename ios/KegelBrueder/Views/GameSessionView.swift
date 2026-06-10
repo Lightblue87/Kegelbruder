@@ -36,13 +36,13 @@ struct GameSessionView: View {
                 Text("Spielstand")
                     .font(.system(size: 22, weight: .bold))
                     .tracking(-0.3)
-                Text("Runde 4 · \(vm.players.count) Spieler")
+                Text("Runde \(vm.runde) · \(vm.players.count) Spieler")
                     .font(.system(size: 14))
                     .foregroundColor(.kbTextSecondary)
             }
             Spacer()
             Button {
-                vm.activeSheet = vm.hasTrueTie() ? .tiebreak : .billing
+                vm.abrechnungStarten()
             } label: {
                 Label("Abrechnung", systemImage: "eurosign")
             }
@@ -234,6 +234,7 @@ private struct NumberInputField: UIViewRepresentable {
             if let text = field.text {
                 let digits = text.filter { $0.isNumber }
                 if digits != text { field.text = digits }
+                value = Int(digits) ?? 0
             }
         }
 
