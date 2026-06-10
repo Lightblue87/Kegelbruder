@@ -5,6 +5,7 @@ struct ContentView: View {
     @EnvironmentObject var store: DataStore
 
     @State private var selectedItem: String? = nil
+    @State private var showAbbruchWarnung = false
 
     var body: some View {
         NavigationSplitView {
@@ -22,7 +23,7 @@ struct ContentView: View {
                         }
 
                         Button(role: .destructive) {
-                            vm.spielAbbrechen()
+                            showAbbruchWarnung = true
                         } label: {
                             Label("Spiel abbrechen", systemImage: "xmark.circle")
                         }
@@ -66,6 +67,12 @@ struct ContentView: View {
         }
         .onChange(of: vm.gameRunning) { _, _ in
             selectedItem = nil   // start → GameSessionView; stop → ReadyScreen
+        }
+        .alert("Spiel wirklich abbrechen?", isPresented: $showAbbruchWarnung) {
+            Button("Abbrechen", role: .cancel) {}
+            Button("Ja, abbrechen", role: .destructive) { vm.spielAbbrechen() }
+        } message: {
+            Text("Alle Punkte und Startgebühren dieses Spiels werden zurückgesetzt. Diese Aktion kann nicht rückgängig gemacht werden.")
         }
     }
 

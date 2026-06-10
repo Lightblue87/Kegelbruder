@@ -55,10 +55,10 @@ struct AttendanceView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(name).font(.headline)
-                        if data.offene_zahlung > 0 {
-                            Text("Offen: \(String(format: "%.2f", data.offene_zahlung)) €")
-                                .font(.caption).foregroundColor(.red)
-                        }
+                        schuldenLabel(
+                            basis: data.offene_zahlung,
+                            istAnwesend: anwesend[name] ?? false
+                        )
                     }
                     Spacer()
                     Toggle("", isOn: Binding(
@@ -92,10 +92,10 @@ struct AttendanceView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(name).font(.headline)
-                        if data.offene_zahlung > 0 {
-                            Text("Offen: \(String(format: "%.2f", data.offene_zahlung)) €")
-                                .font(.caption).foregroundColor(.red)
-                        }
+                        schuldenLabel(
+                            basis: data.offene_zahlung,
+                            istAnwesend: gastAnwesend[name] ?? false
+                        )
                     }
                     Spacer()
                     Toggle("", isOn: Binding(
@@ -229,6 +229,18 @@ struct AttendanceView: View {
         dismiss()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             vm.activeSheet = .playerSort
+        }
+    }
+
+    @ViewBuilder
+    private func schuldenLabel(basis: Double, istAnwesend: Bool) -> some View {
+        if istAnwesend {
+            let gesamt = basis + vm.kasse.Startgeld
+            Text("Offen inkl. Startgeld: \(String(format: "%.2f", gesamt)) €")
+                .font(.caption).foregroundColor(.red)
+        } else if basis > 0 {
+            Text("Offen: \(String(format: "%.2f", basis)) €")
+                .font(.caption).foregroundColor(.red)
         }
     }
 
