@@ -198,22 +198,42 @@ struct ScoreCell: View {
     }
 }
 
-// UITextField wrapper — keyboardType is set at the UIKit level and never changes,
-// so repeated taps always show the number pad regardless of SwiftUI re-renders.
+// UITextField wrapper for integer score input.
+// Using UIViewRepresentable instead of SwiftUI TextField because SwiftUI's
+// .keyboardType() modifier is unreliable on iPad and can flip to the full
+// keyboard on the second tap.
+//
+// The Coordinator holds a plain Binding<Int> (not @Binding) so updateUIView
+// can refresh it on every render pass. This is necessary because ScoreCell
+// creates an inline Binding closure that captures `player` (a struct), and
+// that capture becomes stale after any vm.players re-render. Without the
+// refresh the coordinator would write into the old Player copy and the score
+// would be silently discarded.
 private struct NumberInputField: UIViewRepresentable {
     @Binding var value: Int
 
     func makeUIView(context: Context) -> UITextField {
         let field = UITextField()
-        field.keyboardType = .numberPad
-        field.textAlignment = .center
-        field.font = .monospacedDigitSystemFont(ofSize: 16, weight: .regular)
-        field.placeholder = "0"
-        field.delegate = context.coordinator
+        field.keyboardType       = .numberPad
+        field.textAlignment      = .center
+        field.font               = .monospacedDigitSystemFont(ofSize: 16, weight: .regular)
+        field.placeholder        = "0"
+        field.autocorrectionType = .no
+        field.spellCheckingType  = .no
+        field.delegate           = context.coordinator
         return field
     }
 
     func updateUIView(_ field: UITextField, context: Context) {
+        // Refresh coordinator binding on every render so it never writes into a
+        // stale Player struct capture (Player is a value type; ForEach re-creates
+        // the closure on every vm.players change).
+        context.coordinator.binding = $value
+
+        // Enforce number pad in case SwiftUI or iOS ever resets it between renders.
+        if field.keyboardType != .numberPad {
+            field.keyboardType = .numberPad
+        }
         if !field.isFirstResponder {
             field.text = value > 0 ? "\(value)" : ""
         }
@@ -222,11 +242,9 @@ private struct NumberInputField: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(value: $value) }
 
     final class Coordinator: NSObject, UITextFieldDelegate {
-        @Binding var value: Int
-        init(value: Binding<Int>) { _value = value }
+        var binding: Binding<Int>
+        init(value: Binding<Int>) { self.binding = value }
 
-        // Digits-only filter at the UIKit level — no Binding update on each keystroke,
-        // so SwiftUI never re-renders GameSessionView while the keyboard is open.
         func textField(_ textField: UITextField,
                        shouldChangeCharactersIn range: NSRange,
                        replacementString string: String) -> Bool {
@@ -234,8 +252,9 @@ private struct NumberInputField: UIViewRepresentable {
         }
 
         func textFieldDidEndEditing(_ field: UITextField) {
-            value = field.text.flatMap(Int.init) ?? 0
-            field.text = value > 0 ? "\(value)" : ""
+            let v = field.text.flatMap(Int.init) ?? 0
+            binding.wrappedValue = v
+            field.text = v > 0 ? "\(v)" : ""
         }
 
         func textFieldShouldReturn(_ field: UITextField) -> Bool {
