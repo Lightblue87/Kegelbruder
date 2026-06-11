@@ -346,8 +346,12 @@ final class LockedKeyboardTextField: UITextField {
     }
     required init?(coder: NSCoder) { fatalError() }
     override var keyboardType: UIKeyboardType {
-        get { lockedType }
-        set { }  // intentional no-op
+        // Read-through so KBInputCoordinator can detect when iOS drifted the type
+        // via an internal mechanism (bypassing our setter).
+        get { super.keyboardType }
+        // Any external write gets redirected back to lockedType so property-setter
+        // resets (from SwiftUI / UIKit internals) can never change it.
+        set { super.keyboardType = lockedType }
     }
 }
 

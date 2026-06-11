@@ -203,12 +203,15 @@ struct ScoreCell: View {
 private final class LockedNumberTextField: UITextField {
     override init(frame: CGRect) {
         super.init(frame: frame)
-        super.keyboardType = .numberPad  // set internal storage, not just the override
+        super.keyboardType = .numberPad
     }
     required init?(coder: NSCoder) { fatalError() }
     override var keyboardType: UIKeyboardType {
-        get { .numberPad }
-        set { }  // no-op — prevents iOS from resetting the keyboard type
+        // Read-through: lets the delegate detect when iOS drifted the type.
+        get { super.keyboardType }
+        // Any write is redirected back to numberPad so iOS can never change it
+        // via the property setter.
+        set { super.keyboardType = .numberPad }
     }
 }
 
