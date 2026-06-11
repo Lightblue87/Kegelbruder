@@ -339,19 +339,51 @@ struct KBRowDivider: View {
 
 final class LockedKeyboardTextField: UITextField {
     private let lockedType: UIKeyboardType
+
     init(keyboardType: UIKeyboardType) {
         lockedType = keyboardType
         super.init(frame: .zero)
         super.keyboardType = keyboardType
     }
     required init?(coder: NSCoder) { fatalError() }
+
     override var keyboardType: UIKeyboardType {
-        // Read-through: real internal state is visible so the delegate can
-        // detect and fix any drift before the keyboard appears.
         get { super.keyboardType }
-        // Redirect every write back to lockedType so nothing — SwiftUI, UIKit
-        // internals, or explicit sets — can change the stored type.
         set { super.keyboardType = lockedType }
+    }
+
+    // On iPad, UIKit can show the full letter keyboard even when keyboardType
+    // is numberPad/decimalPad. The only reliable fix is to call reloadInputViews()
+    // AFTER the keyboard animation has fully completed — doing it earlier (e.g.
+    // in becomeFirstResponder or textFieldDidBeginEditing) dismisses the keyboard.
+    // UIKeyboardDidShowNotification fires exactly when the animation is done.
+    override func becomeFirstResponder() -> Bool {
+        let ok = super.becomeFirstResponder()
+        if ok {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFullyShown),
+                name: UIResponder.keyboardDidShowNotification,
+                object: nil
+            )
+        }
+        return ok
+    }
+
+    override func resignFirstResponder() -> Bool {
+        NotificationCenter.default.removeObserver(
+            self, name: UIResponder.keyboardDidShowNotification, object: nil
+        )
+        return super.resignFirstResponder()
+    }
+
+    @objc private func keyboardFullyShown() {
+        NotificationCenter.default.removeObserver(
+            self, name: UIResponder.keyboardDidShowNotification, object: nil
+        )
+        guard isFirstResponder else { return }
+        super.keyboardType = lockedType   // ensure internal storage before reload
+        reloadInputViews()
     }
 }
 

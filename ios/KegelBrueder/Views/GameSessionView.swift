@@ -206,12 +206,39 @@ private final class LockedNumberTextField: UITextField {
         super.keyboardType = .numberPad
     }
     required init?(coder: NSCoder) { fatalError() }
+
     override var keyboardType: UIKeyboardType {
-        // Read-through: real internal state is visible so the delegate can
-        // detect and fix any drift before the keyboard appears.
         get { super.keyboardType }
-        // Redirect every write back to numberPad.
         set { super.keyboardType = .numberPad }
+    }
+
+    override func becomeFirstResponder() -> Bool {
+        let ok = super.becomeFirstResponder()
+        if ok {
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(keyboardFullyShown),
+                name: UIResponder.keyboardDidShowNotification,
+                object: nil
+            )
+        }
+        return ok
+    }
+
+    override func resignFirstResponder() -> Bool {
+        NotificationCenter.default.removeObserver(
+            self, name: UIResponder.keyboardDidShowNotification, object: nil
+        )
+        return super.resignFirstResponder()
+    }
+
+    @objc private func keyboardFullyShown() {
+        NotificationCenter.default.removeObserver(
+            self, name: UIResponder.keyboardDidShowNotification, object: nil
+        )
+        guard isFirstResponder else { return }
+        super.keyboardType = .numberPad
+        reloadInputViews()
     }
 }
 
