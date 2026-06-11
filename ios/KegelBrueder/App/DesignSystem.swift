@@ -337,7 +337,7 @@ struct KBRowDivider: View {
 // that captures a value-type (struct), which becomes stale after each
 // parent re-render.
 
-private final class LockedKeyboardTextField: UITextField {
+final class LockedKeyboardTextField: UITextField {
     private let lockedType: UIKeyboardType
     init(keyboardType: UIKeyboardType) {
         lockedType = keyboardType
