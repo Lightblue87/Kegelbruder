@@ -346,28 +346,12 @@ final class LockedKeyboardTextField: UITextField {
     }
     required init?(coder: NSCoder) { fatalError() }
     override var keyboardType: UIKeyboardType {
-        // Read-through so KBInputCoordinator can detect when iOS drifted the type
-        // via an internal mechanism (bypassing our setter).
+        // Read-through: real internal state is visible so the delegate can
+        // detect and fix any drift before the keyboard appears.
         get { super.keyboardType }
-        // Any external write gets redirected back to lockedType so property-setter
-        // resets (from SwiftUI / UIKit internals) can never change it.
+        // Redirect every write back to lockedType so nothing — SwiftUI, UIKit
+        // internals, or explicit sets — can change the stored type.
         set { super.keyboardType = lockedType }
-    }
-
-    // iPad bug: UIKit can render a stale full-keyboard layout even though the
-    // field's traits correctly say numberPad/decimalPad — so trait checks never
-    // detect it. Unconditionally rebuilding the input views right after the
-    // field becomes first responder forces UIKit to re-read the traits and
-    // show the correct layout on every focus.
-    override func becomeFirstResponder() -> Bool {
-        let ok = super.becomeFirstResponder()
-        if ok {
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.isFirstResponder else { return }
-                self.reloadInputViews()
-            }
-        }
-        return ok
     }
 }
 
@@ -385,12 +369,18 @@ final class KBInputCoordinator: NSObject, UITextFieldDelegate {
             : .decimalDigits
     }
 
-    func textFieldDidBeginEditing(_ f: UITextField) {
-        // Second line of defense: the trait can be correct while the rendered
-        // keyboard layout is stale (iPad bug), so reload unconditionally —
-        // a trait comparison can never detect this case.
+    // Fires before the keyboard animation starts — correct moment to ensure
+    // the type is set so iOS picks the right layout from the very first frame.
+    func textFieldShouldBeginEditing(_ f: UITextField) -> Bool {
         f.keyboardType = target
-        f.reloadInputViews()
+        return true
+    }
+
+    func textFieldDidBeginEditing(_ f: UITextField) {
+        // Belt-and-suspenders: re-assert after focus is confirmed.
+        // No reloadInputViews() — calling it during the keyboard animation
+        // dismisses the keyboard immediately on iPad.
+        f.keyboardType = target
     }
 
     func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,

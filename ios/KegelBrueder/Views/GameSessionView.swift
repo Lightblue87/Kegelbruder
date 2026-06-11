@@ -207,25 +207,11 @@ private final class LockedNumberTextField: UITextField {
     }
     required init?(coder: NSCoder) { fatalError() }
     override var keyboardType: UIKeyboardType {
-        // Read-through: lets the delegate detect when iOS drifted the type.
+        // Read-through: real internal state is visible so the delegate can
+        // detect and fix any drift before the keyboard appears.
         get { super.keyboardType }
-        // Any write is redirected back to numberPad so iOS can never change it
-        // via the property setter.
+        // Redirect every write back to numberPad.
         set { super.keyboardType = .numberPad }
-    }
-
-    // iPad bug: the rendered keyboard layout can be stale (full keyboard)
-    // even though the trait correctly says numberPad. Force UIKit to rebuild
-    // the input views from the traits on every focus.
-    override func becomeFirstResponder() -> Bool {
-        let ok = super.becomeFirstResponder()
-        if ok {
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.isFirstResponder else { return }
-                self.reloadInputViews()
-            }
-        }
-        return ok
     }
 }
 
@@ -260,11 +246,13 @@ private struct NumberInputField: UIViewRepresentable {
         var binding: Binding<Int>
         init(value: Binding<Int>) { self.binding = value }
 
-        func textFieldDidBeginEditing(_ f: UITextField) {
-            // Second line of defense: the rendered keyboard layout can be stale
-            // even when the trait is correct, so reload unconditionally.
+        func textFieldShouldBeginEditing(_ f: UITextField) -> Bool {
             f.keyboardType = .numberPad
-            f.reloadInputViews()
+            return true
+        }
+
+        func textFieldDidBeginEditing(_ f: UITextField) {
+            f.keyboardType = .numberPad
         }
 
         func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
