@@ -226,12 +226,30 @@ struct AttendanceView: View {
                     .padding(.top, 16)
 
                     // Attending player list
-                    Text("Spieler heute")
-                        .font(.subheadline.bold())
-                        .foregroundColor(.kbTextSecondary)
-                        .padding(.horizontal, 16)
-                        .padding(.top, 20)
-                        .padding(.bottom, 8)
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Spieler heute")
+                            .font(.subheadline.bold())
+                            .foregroundColor(.kbTextSecondary)
+                        Spacer()
+                        let stammAnwesend = anwesend.filter { $0.value }.count
+                        let stammGesamt   = stammMitglieder.count
+                        let gästeAnwesend = gastAnwesend.filter { $0.value }.count
+                                           + neueGäste.filter { $0.selected }.count
+                        let stammColor: Color = stammGesamt > 0 && stammAnwesend * 2 >= stammGesamt
+                            ? .kbSuccess : .kbWarning
+                        HStack(spacing: 6) {
+                            Label("\(stammAnwesend)/\(stammGesamt)", systemImage: "person.2.fill")
+                                .foregroundColor(stammColor)
+                            if gästeAnwesend > 0 {
+                                Label("\(gästeAnwesend)", systemImage: "person.badge.plus")
+                                    .foregroundColor(.kbGast)
+                            }
+                        }
+                        .font(.system(size: 12, weight: .semibold))
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
+                    .padding(.bottom, 8)
 
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(anwesendeNamen, id: \.self) { name in
