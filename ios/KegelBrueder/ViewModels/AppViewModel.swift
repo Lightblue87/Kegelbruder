@@ -598,14 +598,9 @@ class AppViewModel: ObservableObject {
                 let tiebreakPunkte = gruppe.map { tiebreakExtras[$0.name]?.punkte ?? 0 }
                 if Set(tiebreakPunkte).count > 1 { i = j; continue }
 
-                // pumpRank resolves rank ORDER but not whether Punktestechen is needed:
-                // players tied on summe AND pumpen must still play Punktestechen.
-
-                let pumpenCounts = gruppe.map { $0.pumpen + (tiebreakExtras[$0.name]?.pumpen ?? 0) }
-                let allSamePumpen = Set(pumpenCounts).count == 1
-                if allSamePumpen {
-                    return gruppe.map { $0.name }
-                }
+                // Any unresolved summe-tie → Punktestechen, regardless of pumpen.
+                // Pumpen is NOT an automatic substitute for the Stechen.
+                return gruppe.map { $0.name }
             }
             i = j
         }
