@@ -429,6 +429,7 @@ struct NumberStringInputField: UIViewRepresentable {
     typealias Coordinator = KBInputCoordinator
     var placeholder: String = "0"
     @Binding var text: String
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeUIView(context: Context) -> LockedKeyboardTextField {
         let f = LockedKeyboardTextField(keyboardType: .numberPad)
@@ -436,6 +437,7 @@ struct NumberStringInputField: UIViewRepresentable {
         f.font = .monospacedDigitSystemFont(ofSize: 20, weight: .bold)
         f.placeholder = placeholder
         f.autocorrectionType = .no; f.spellCheckingType = .no
+        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
         f.delegate = context.coordinator
         return f
     }
@@ -443,6 +445,7 @@ struct NumberStringInputField: UIViewRepresentable {
     func updateUIView(_ f: LockedKeyboardTextField, context: Context) {
         context.coordinator.binding = $text
         if !f.isFirstResponder { f.text = text }
+        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
     }
 
     func makeCoordinator() -> KBInputCoordinator { KBInputCoordinator(text: $text, target: .numberPad) }
@@ -453,6 +456,7 @@ struct DecimalInputField: UIViewRepresentable {
     typealias Coordinator = KBInputCoordinator
     var placeholder: String = "0,00"
     @Binding var text: String
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeUIView(context: Context) -> LockedKeyboardTextField {
         let f = LockedKeyboardTextField(keyboardType: .decimalPad)
@@ -460,6 +464,7 @@ struct DecimalInputField: UIViewRepresentable {
         f.font = .systemFont(ofSize: 17)
         f.placeholder = placeholder
         f.autocorrectionType = .no; f.spellCheckingType = .no
+        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
         f.delegate = context.coordinator
         return f
     }
@@ -467,6 +472,7 @@ struct DecimalInputField: UIViewRepresentable {
     func updateUIView(_ f: LockedKeyboardTextField, context: Context) {
         context.coordinator.binding = $text
         if !f.isFirstResponder { f.text = text }
+        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
     }
 
     func makeCoordinator() -> KBInputCoordinator { KBInputCoordinator(text: $text, target: .decimalPad) }

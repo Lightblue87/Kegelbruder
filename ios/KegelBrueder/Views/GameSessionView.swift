@@ -248,6 +248,7 @@ private final class LockedNumberTextField: UITextField {
 // the binding closure on every vm.players change).
 private struct NumberInputField: UIViewRepresentable {
     @Binding var value: Int
+    @Environment(\.colorScheme) private var colorScheme
 
     func makeUIView(context: Context) -> LockedNumberTextField {
         let f = LockedNumberTextField()
@@ -256,6 +257,7 @@ private struct NumberInputField: UIViewRepresentable {
         f.placeholder        = "0"
         f.autocorrectionType = .no
         f.spellCheckingType  = .no
+        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
         f.delegate           = context.coordinator
         return f
     }
@@ -265,6 +267,7 @@ private struct NumberInputField: UIViewRepresentable {
         if !f.isFirstResponder {
             f.text = value > 0 ? "\(value)" : ""
         }
+        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
     }
 
     func makeCoordinator() -> Coordinator { Coordinator(value: $value) }
