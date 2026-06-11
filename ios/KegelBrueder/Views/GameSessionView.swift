@@ -210,14 +210,10 @@ private struct NumberInputField: UIViewRepresentable {
         field.font = .monospacedDigitSystemFont(ofSize: 16, weight: .regular)
         field.placeholder = "0"
         field.delegate = context.coordinator
-        field.addTarget(context.coordinator,
-                        action: #selector(Coordinator.editingChanged(_:)),
-                        for: .editingChanged)
         return field
     }
 
     func updateUIView(_ field: UITextField, context: Context) {
-        // Only update text when the field is not being edited to avoid cursor jumps
         if !field.isFirstResponder {
             field.text = value > 0 ? "\(value)" : ""
         }
@@ -229,21 +225,17 @@ private struct NumberInputField: UIViewRepresentable {
         @Binding var value: Int
         init(value: Binding<Int>) { _value = value }
 
-        @objc func editingChanged(_ field: UITextField) {
-            // Restrict to digits only
-            if let text = field.text {
-                let digits = text.filter { $0.isNumber }
-                if digits != text { field.text = digits }
-                value = Int(digits) ?? 0
-            }
+        // Digits-only filter at the UIKit level — no Binding update on each keystroke,
+        // so SwiftUI never re-renders GameSessionView while the keyboard is open.
+        func textField(_ textField: UITextField,
+                       shouldChangeCharactersIn range: NSRange,
+                       replacementString string: String) -> Bool {
+            string.isEmpty || string.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
         }
 
         func textFieldDidEndEditing(_ field: UITextField) {
-            if let text = field.text, let v = Int(text), v >= 0 {
-                value = v
-            } else {
-                field.text = value > 0 ? "\(value)" : ""
-            }
+            value = field.text.flatMap(Int.init) ?? 0
+            field.text = value > 0 ? "\(value)" : ""
         }
 
         func textFieldShouldReturn(_ field: UITextField) -> Bool {
