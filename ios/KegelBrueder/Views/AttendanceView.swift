@@ -355,7 +355,8 @@ struct AttendanceView: View {
         }
 
         var parsedZahlungen: [String: Double] = [:]
-        for (name, str) in zahlungen          { parsedZahlungen[name] = parse(str) }
+        for (name, str) in zahlungen
+            where anwesend[name] ?? false      { parsedZahlungen[name] = parse(str) }
         for (name, str) in gastZahlungen
             where gastAnwesend[name] ?? false  { parsedZahlungen[name] = parse(str) }
         for gast in neueGäste where gast.selected {

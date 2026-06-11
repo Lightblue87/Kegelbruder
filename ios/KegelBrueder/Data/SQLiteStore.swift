@@ -186,7 +186,11 @@ final class SQLiteStore {
 
     func ladeAktuellesSpiel() -> AktuellesSpielFile {
         var players: [String: PlayerData] = [:]
-        try? query("SELECT * FROM aktuelles_spiel_spieler ORDER BY position") { row in
+        try? query("""
+            SELECT name, typ, punkte_r1, punkte_r2, punkte_r3, punkte_r4,
+                   pumpen, neuner, kranz, position, offene_zahlung
+            FROM aktuelles_spiel_spieler ORDER BY position
+            """) { row in
             let name = row.text(0)
             players[name] = PlayerData(
                 typ: row.text(1),
@@ -268,14 +272,18 @@ final class SQLiteStore {
 
             var players: [String: PlayerData] = [:]
             try? query(
-                "SELECT * FROM historie_spieler WHERE spiel_id = ?",
+                """
+                SELECT name, typ, punkte_r1, punkte_r2, punkte_r3, punkte_r4,
+                       pumpen, neuner, kranz, offene_zahlung
+                FROM historie_spieler WHERE spiel_id = ?
+                """,
                 params: [.int(spielId)]
             ) { row in
-                players[row.text(2)] = PlayerData(
-                    typ: row.text(3),
-                    punkte: [row.int(4), row.int(5), row.int(6), row.int(7)],
-                    offene_zahlung: row.real(11),
-                    pumpen: row.int(8), neuner: row.int(9), kranz: row.int(10),
+                players[row.text(0)] = PlayerData(
+                    typ: row.text(1),
+                    punkte: [row.int(2), row.int(3), row.int(4), row.int(5)],
+                    offene_zahlung: row.real(9),
+                    pumpen: row.int(6), neuner: row.int(7), kranz: row.int(8),
                     position: nil
                 )
             }

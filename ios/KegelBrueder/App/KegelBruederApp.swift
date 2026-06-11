@@ -57,7 +57,7 @@ struct KegelBruederApp: App {
                         vm.laden()
                     }
                 case .background:
-                    break // iCloud syncs automatically
+                    vm.lockFreigeben()  // ensure lock is cleared even on force-quit
                 default:
                     break
                 }
