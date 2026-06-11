@@ -174,6 +174,9 @@ struct SettingsView: View {
     }
 
     private func speichern() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
         var k = vm.kasse
         k.Startgeld    = parse(startgeld)   ?? k.Startgeld
         k.Pumpe        = parse(pumpe)        ?? k.Pumpe

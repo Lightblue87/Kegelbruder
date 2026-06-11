@@ -140,6 +140,13 @@ struct PlayerEditSheet: View {
     }
 
     private func speichern() {
+        // Resign the active text field so textFieldDidEndEditing fires and
+        // flushes the DecimalInputField's current text into the `schulden` binding
+        // before we read it. Without this, tapping Speichern while the field is
+        // still focused reads the stale (empty) binding value and saves 0.
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
         let n = name.trimmingCharacters(in: .whitespaces)
         guard !n.isEmpty else { error = "Name darf nicht leer sein."; return }
         let cleaned = schulden.replacingOccurrences(of: ",", with: ".")

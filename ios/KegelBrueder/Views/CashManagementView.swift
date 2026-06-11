@@ -103,6 +103,9 @@ struct CashManagementView: View {
     }
 
     private func buchen() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
         errorMessage = nil
         let cleaned = betrag.replacingOccurrences(of: ",", with: ".")
         guard let b = Double(cleaned), b > 0 else {
