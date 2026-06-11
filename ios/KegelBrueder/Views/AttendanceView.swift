@@ -75,7 +75,13 @@ struct AttendanceView: View {
                     Spacer()
                     Toggle("", isOn: Binding(
                         get: { anwesend[name] ?? false },
-                        set: { anwesend[name] = $0 }
+                        set: { val in
+                            anwesend[name] = val
+                            if val && (zahlungen[name] ?? "").isEmpty {
+                                let gesamt = data.offene_zahlung + vm.kasse.Startgeld
+                                zahlungen[name] = fmtBetrag(gesamt)
+                            }
+                        }
                     )).labelsHidden()
                 }
 
@@ -112,7 +118,12 @@ struct AttendanceView: View {
                     Spacer()
                     Toggle("", isOn: Binding(
                         get: { gastAnwesend[name] ?? false },
-                        set: { gastAnwesend[name] = $0 }
+                        set: { val in
+                            gastAnwesend[name] = val
+                            if val && (gastZahlungen[name] ?? "").isEmpty {
+                                gastZahlungen[name] = fmtBetrag(vm.kasse.Startgeld)
+                            }
+                        }
                     )).labelsHidden()
                 }
 
@@ -136,7 +147,15 @@ struct AttendanceView: View {
                     Text(gast.name).font(.headline)
                     KBPill("Neu", tone: .guest)
                     Spacer()
-                    Toggle("", isOn: $gast.selected).labelsHidden()
+                    Toggle("", isOn: Binding(
+                        get: { gast.selected },
+                        set: { val in
+                            $gast.wrappedValue.selected = val
+                            if val && gast.zahlung.isEmpty {
+                                $gast.wrappedValue.zahlung = fmtBetrag(vm.kasse.Startgeld)
+                            }
+                        }
+                    )).labelsHidden()
                 }
 
                 if gast.selected {
@@ -156,7 +175,7 @@ struct AttendanceView: View {
                 Button("Hinzufügen") {
                     let n = neuerGastName.trimmingCharacters(in: .whitespaces)
                     guard !n.isEmpty else { return }
-                    neueGäste.append(NeuerGast(name: n))
+                    neueGäste.append(NeuerGast(name: n, zahlung: fmtBetrag(vm.kasse.Startgeld)))
                     neuerGastName = ""
                 }
                 .disabled(neuerGastName.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -383,6 +402,10 @@ struct AttendanceView: View {
 
     private func parse(_ str: String) -> Double {
         Double(str.replacingOccurrences(of: ",", with: ".")) ?? 0.0
+    }
+
+    private func fmtBetrag(_ val: Double) -> String {
+        String(format: "%.2f", val)
     }
 }
 
