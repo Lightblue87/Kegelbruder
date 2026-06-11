@@ -339,6 +339,9 @@ struct KBRowDivider: View {
 
 final class LockedKeyboardTextField: UITextField {
     private let lockedType: UIKeyboardType
+    // Stored separately so becomeFirstResponder and keyboardFullyShown
+    // can re-assert appearance at the right moments without needing SwiftUI.
+    var isDark: Bool = false
 
     init(keyboardType: UIKeyboardType) {
         lockedType = keyboardType
@@ -352,12 +355,9 @@ final class LockedKeyboardTextField: UITextField {
         set { super.keyboardType = lockedType }
     }
 
-    // On iPad, UIKit can show the full letter keyboard even when keyboardType
-    // is numberPad/decimalPad. The only reliable fix is to call reloadInputViews()
-    // AFTER the keyboard animation has fully completed — doing it earlier (e.g.
-    // in becomeFirstResponder or textFieldDidBeginEditing) dismisses the keyboard.
-    // UIKeyboardDidShowNotification fires exactly when the animation is done.
     override func becomeFirstResponder() -> Bool {
+        // Assert appearance before UIKit reads keyboard config for this session.
+        super.keyboardAppearance = isDark ? .dark : .default
         let ok = super.becomeFirstResponder()
         if ok {
             NotificationCenter.default.addObserver(
@@ -382,7 +382,9 @@ final class LockedKeyboardTextField: UITextField {
             self, name: UIResponder.keyboardDidShowNotification, object: nil
         )
         guard isFirstResponder else { return }
-        super.keyboardType = lockedType   // ensure internal storage before reload
+        super.keyboardType = lockedType
+        // Re-assert appearance right before reload — the type-setter may have side effects.
+        super.keyboardAppearance = isDark ? .dark : .default
         reloadInputViews()
     }
 }
@@ -437,6 +439,7 @@ struct NumberStringInputField: UIViewRepresentable {
         f.font = .monospacedDigitSystemFont(ofSize: 20, weight: .bold)
         f.placeholder = placeholder
         f.autocorrectionType = .no; f.spellCheckingType = .no
+        f.isDark = colorScheme == .dark
         f.keyboardAppearance = colorScheme == .dark ? .dark : .default
         f.delegate = context.coordinator
         return f
@@ -445,6 +448,7 @@ struct NumberStringInputField: UIViewRepresentable {
     func updateUIView(_ f: LockedKeyboardTextField, context: Context) {
         context.coordinator.binding = $text
         if !f.isFirstResponder { f.text = text }
+        f.isDark = colorScheme == .dark
         f.keyboardAppearance = colorScheme == .dark ? .dark : .default
     }
 
@@ -464,6 +468,7 @@ struct DecimalInputField: UIViewRepresentable {
         f.font = .systemFont(ofSize: 17)
         f.placeholder = placeholder
         f.autocorrectionType = .no; f.spellCheckingType = .no
+        f.isDark = colorScheme == .dark
         f.keyboardAppearance = colorScheme == .dark ? .dark : .default
         f.delegate = context.coordinator
         return f
@@ -472,6 +477,7 @@ struct DecimalInputField: UIViewRepresentable {
     func updateUIView(_ f: LockedKeyboardTextField, context: Context) {
         context.coordinator.binding = $text
         if !f.isFirstResponder { f.text = text }
+        f.isDark = colorScheme == .dark
         f.keyboardAppearance = colorScheme == .dark ? .dark : .default
     }
 

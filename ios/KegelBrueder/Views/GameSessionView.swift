@@ -201,6 +201,8 @@ struct ScoreCell: View {
 // LockedKeyboardTextField for integer score input — same pattern as in DesignSystem
 // but scoped to this file (DesignSystem's version is private).
 private final class LockedNumberTextField: UITextField {
+    var isDark: Bool = false
+
     override init(frame: CGRect) {
         super.init(frame: frame)
         super.keyboardType = .numberPad
@@ -213,6 +215,7 @@ private final class LockedNumberTextField: UITextField {
     }
 
     override func becomeFirstResponder() -> Bool {
+        super.keyboardAppearance = isDark ? .dark : .default
         let ok = super.becomeFirstResponder()
         if ok {
             NotificationCenter.default.addObserver(
@@ -238,6 +241,7 @@ private final class LockedNumberTextField: UITextField {
         )
         guard isFirstResponder else { return }
         super.keyboardType = .numberPad
+        super.keyboardAppearance = isDark ? .dark : .default
         reloadInputViews()
     }
 }
@@ -257,6 +261,7 @@ private struct NumberInputField: UIViewRepresentable {
         f.placeholder        = "0"
         f.autocorrectionType = .no
         f.spellCheckingType  = .no
+        f.isDark             = colorScheme == .dark
         f.keyboardAppearance = colorScheme == .dark ? .dark : .default
         f.delegate           = context.coordinator
         return f
@@ -267,6 +272,7 @@ private struct NumberInputField: UIViewRepresentable {
         if !f.isFirstResponder {
             f.text = value > 0 ? "\(value)" : ""
         }
+        f.isDark             = colorScheme == .dark
         f.keyboardAppearance = colorScheme == .dark ? .dark : .default
     }
 
