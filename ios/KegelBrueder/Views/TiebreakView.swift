@@ -9,6 +9,7 @@ struct TiebreakView: View {
     @State private var runde: Int = 1
     @State private var inputs: [PlayerInput] = []
     @State private var ergebnis: String? = nil
+    @State private var zeigeGleichstandAlert = false
 
     var body: some View {
         NavigationStack {
@@ -30,6 +31,14 @@ struct TiebreakView: View {
             }
         }
         .onAppear { initialisieren() }
+        .alert("Gleichstand – Runde \(runde)", isPresented: $zeigeGleichstandAlert) {
+            Button("Nächste Runde") {
+                runde += 1
+                inputs = inputs.map { PlayerInput(name: $0.name) }
+            }
+        } message: {
+            Text("Alle Spieler haben die gleichen Punkte. Eine weitere Stechen-Runde ist erforderlich.")
+        }
     }
 
     // MARK: - Header
@@ -136,9 +145,8 @@ struct TiebreakView: View {
             if mitMinPumpen.count == 1 {
                 ergebnis = mitMinPumpen[0].name
             } else {
-                // Truly tied – play another round
-                runde += 1
-                inputs = inputs.map { PlayerInput(name: $0.name) }
+                // Truly tied – require explicit acknowledgment before next round
+                zeigeGleichstandAlert = true
             }
         }
     }

@@ -356,8 +356,7 @@ final class LockedKeyboardTextField: UITextField {
     }
 
     override func becomeFirstResponder() -> Bool {
-        // Assert appearance before UIKit reads keyboard config for this session.
-        super.keyboardAppearance = isDark ? .dark : .default
+        applyAppearance()
         let ok = super.becomeFirstResponder()
         if ok {
             NotificationCenter.default.addObserver(
@@ -383,9 +382,17 @@ final class LockedKeyboardTextField: UITextField {
         )
         guard isFirstResponder else { return }
         super.keyboardType = lockedType
-        // Re-assert appearance right before reload — the type-setter may have side effects.
-        super.keyboardAppearance = isDark ? .dark : .default
+        applyAppearance()
         reloadInputViews()
+    }
+
+    private func applyAppearance() {
+        // keyboardAppearance handles full-width keyboards.
+        // overrideUserInterfaceStyle forces the compact floating keyboard on iPad
+        // (hardware keyboard attached) to respect dark mode — it inherits its
+        // traitCollection from the first responder, not from keyboardAppearance.
+        super.keyboardAppearance = isDark ? .dark : .default
+        overrideUserInterfaceStyle = isDark ? .dark : .unspecified
     }
 }
 

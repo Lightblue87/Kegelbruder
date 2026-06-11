@@ -215,7 +215,7 @@ private final class LockedNumberTextField: UITextField {
     }
 
     override func becomeFirstResponder() -> Bool {
-        super.keyboardAppearance = isDark ? .dark : .default
+        applyAppearance()
         let ok = super.becomeFirstResponder()
         if ok {
             NotificationCenter.default.addObserver(
@@ -241,8 +241,13 @@ private final class LockedNumberTextField: UITextField {
         )
         guard isFirstResponder else { return }
         super.keyboardType = .numberPad
-        super.keyboardAppearance = isDark ? .dark : .default
+        applyAppearance()
         reloadInputViews()
+    }
+
+    private func applyAppearance() {
+        super.keyboardAppearance = isDark ? .dark : .default
+        overrideUserInterfaceStyle = isDark ? .dark : .unspecified
     }
 }
 
