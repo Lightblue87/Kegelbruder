@@ -213,6 +213,20 @@ private final class LockedNumberTextField: UITextField {
         // via the property setter.
         set { super.keyboardType = .numberPad }
     }
+
+    // iPad bug: the rendered keyboard layout can be stale (full keyboard)
+    // even though the trait correctly says numberPad. Force UIKit to rebuild
+    // the input views from the traits on every focus.
+    override func becomeFirstResponder() -> Bool {
+        let ok = super.becomeFirstResponder()
+        if ok {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isFirstResponder else { return }
+                self.reloadInputViews()
+            }
+        }
+        return ok
+    }
 }
 
 // UIViewRepresentable wrapper for integer score cells.
@@ -247,11 +261,10 @@ private struct NumberInputField: UIViewRepresentable {
         init(value: Binding<Int>) { self.binding = value }
 
         func textFieldDidBeginEditing(_ f: UITextField) {
-            // Safety net: reload keyboard if iOS changed the type somehow.
-            if f.keyboardType != .numberPad {
-                f.keyboardType = .numberPad
-                f.reloadInputViews()
-            }
+            // Second line of defense: the rendered keyboard layout can be stale
+            // even when the trait is correct, so reload unconditionally.
+            f.keyboardType = .numberPad
+            f.reloadInputViews()
         }
 
         func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,

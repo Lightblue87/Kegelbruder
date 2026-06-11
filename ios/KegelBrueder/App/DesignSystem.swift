@@ -353,6 +353,22 @@ final class LockedKeyboardTextField: UITextField {
         // resets (from SwiftUI / UIKit internals) can never change it.
         set { super.keyboardType = lockedType }
     }
+
+    // iPad bug: UIKit can render a stale full-keyboard layout even though the
+    // field's traits correctly say numberPad/decimalPad — so trait checks never
+    // detect it. Unconditionally rebuilding the input views right after the
+    // field becomes first responder forces UIKit to re-read the traits and
+    // show the correct layout on every focus.
+    override func becomeFirstResponder() -> Bool {
+        let ok = super.becomeFirstResponder()
+        if ok {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isFirstResponder else { return }
+                self.reloadInputViews()
+            }
+        }
+        return ok
+    }
 }
 
 // Shared coordinator used by both String-binding wrappers below.
@@ -370,11 +386,11 @@ final class KBInputCoordinator: NSObject, UITextFieldDelegate {
     }
 
     func textFieldDidBeginEditing(_ f: UITextField) {
-        // Safety net: force correct keyboard if iOS reset it somehow.
-        if f.keyboardType != target {
-            f.keyboardType = target
-            f.reloadInputViews()
-        }
+        // Second line of defense: the trait can be correct while the rendered
+        // keyboard layout is stale (iPad bug), so reload unconditionally —
+        // a trait comparison can never detect this case.
+        f.keyboardType = target
+        f.reloadInputViews()
     }
 
     func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
