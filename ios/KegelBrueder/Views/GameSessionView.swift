@@ -198,44 +198,42 @@ struct ScoreCell: View {
     }
 }
 
-// UITextField wrapper for integer score input.
-// Using UIViewRepresentable instead of SwiftUI TextField because SwiftUI's
-// .keyboardType() modifier is unreliable on iPad and can flip to the full
-// keyboard on the second tap.
-//
-// The Coordinator holds a plain Binding<Int> (not @Binding) so updateUIView
-// can refresh it on every render pass. This is necessary because ScoreCell
-// creates an inline Binding closure that captures `player` (a struct), and
-// that capture becomes stale after any vm.players re-render. Without the
-// refresh the coordinator would write into the old Player copy and the score
-// would be silently discarded.
+// LockedKeyboardTextField for integer score input — same pattern as in DesignSystem
+// but scoped to this file (DesignSystem's version is private).
+private final class LockedNumberTextField: UITextField {
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        super.keyboardType = .numberPad  // set internal storage, not just the override
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var keyboardType: UIKeyboardType {
+        get { .numberPad }
+        set { }  // no-op — prevents iOS from resetting the keyboard type
+    }
+}
+
+// UIViewRepresentable wrapper for integer score cells.
+// Coordinator.binding is refreshed in updateUIView to avoid writing into a
+// stale Player struct capture (Player is a value type; ForEach re-creates
+// the binding closure on every vm.players change).
 private struct NumberInputField: UIViewRepresentable {
     @Binding var value: Int
 
-    func makeUIView(context: Context) -> UITextField {
-        let field = UITextField()
-        field.keyboardType       = .numberPad
-        field.textAlignment      = .center
-        field.font               = .monospacedDigitSystemFont(ofSize: 16, weight: .regular)
-        field.placeholder        = "0"
-        field.autocorrectionType = .no
-        field.spellCheckingType  = .no
-        field.delegate           = context.coordinator
-        return field
+    func makeUIView(context: Context) -> LockedNumberTextField {
+        let f = LockedNumberTextField()
+        f.textAlignment      = .center
+        f.font               = .monospacedDigitSystemFont(ofSize: 16, weight: .regular)
+        f.placeholder        = "0"
+        f.autocorrectionType = .no
+        f.spellCheckingType  = .no
+        f.delegate           = context.coordinator
+        return f
     }
 
-    func updateUIView(_ field: UITextField, context: Context) {
-        // Refresh coordinator binding on every render so it never writes into a
-        // stale Player struct capture (Player is a value type; ForEach re-creates
-        // the closure on every vm.players change).
+    func updateUIView(_ f: LockedNumberTextField, context: Context) {
         context.coordinator.binding = $value
-
-        // Enforce number pad in case SwiftUI or iOS ever resets it between renders.
-        if field.keyboardType != .numberPad {
-            field.keyboardType = .numberPad
-        }
-        if !field.isFirstResponder {
-            field.text = value > 0 ? "\(value)" : ""
+        if !f.isFirstResponder {
+            f.text = value > 0 ? "\(value)" : ""
         }
     }
 
@@ -245,21 +243,27 @@ private struct NumberInputField: UIViewRepresentable {
         var binding: Binding<Int>
         init(value: Binding<Int>) { self.binding = value }
 
-        func textField(_ textField: UITextField,
-                       shouldChangeCharactersIn range: NSRange,
-                       replacementString string: String) -> Bool {
-            string.isEmpty || string.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
+        func textFieldDidBeginEditing(_ f: UITextField) {
+            // Safety net: reload keyboard if iOS changed the type somehow.
+            if f.keyboardType != .numberPad {
+                f.keyboardType = .numberPad
+                f.reloadInputViews()
+            }
         }
 
-        func textFieldDidEndEditing(_ field: UITextField) {
-            let v = field.text.flatMap(Int.init) ?? 0
+        func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
+                       replacementString s: String) -> Bool {
+            s.isEmpty || s.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
+        }
+
+        func textFieldDidEndEditing(_ f: UITextField) {
+            let v = f.text.flatMap(Int.init) ?? 0
             binding.wrappedValue = v
-            field.text = v > 0 ? "\(v)" : ""
+            f.text = v > 0 ? "\(v)" : ""
         }
 
-        func textFieldShouldReturn(_ field: UITextField) -> Bool {
-            field.resignFirstResponder()
-            return true
+        func textFieldShouldReturn(_ f: UITextField) -> Bool {
+            f.resignFirstResponder(); return true
         }
     }
 }

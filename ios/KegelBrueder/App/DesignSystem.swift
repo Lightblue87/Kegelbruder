@@ -319,99 +319,113 @@ struct KBRowDivider: View {
 }
 
 // MARK: - UITextField wrappers (stable keyboard type on iPad)
-// SwiftUI's .keyboardType() modifier briefly shows the wrong keyboard before
-// switching on iPad. UIViewRepresentable sets the type at UIKit level so it
-// never flickers. The Coordinator holds a plain Binding (not @Binding) that
-// is refreshed in updateUIView — necessary when the caller creates an inline
-// Binding closure that captures a value-type (struct), which becomes stale
-// after any parent re-render.
+//
+// Root cause of the "full keyboard on second tap" bug:
+// iOS can reset UITextField.keyboardType to .default between SwiftUI render
+// passes. Neither makeUIView nor updateUIView fire at the exact moment
+// the keyboard appears, so corrections there are too late.
+//
+// Fix uses two layers:
+//   1. LockedKeyboardTextField subclass — overrides the keyboardType setter
+//      to a no-op so nothing can ever change the type after init.
+//   2. textFieldDidBeginEditing in the coordinator — fires at the instant
+//      UIKit makes the field first responder. If, against all odds, the type
+//      was changed, we detect and reload before the keyboard animates in.
+//
+// The Coordinator holds a plain Binding (not @Binding) refreshed in
+// updateUIView — required when the caller creates an inline Binding closure
+// that captures a value-type (struct), which becomes stale after each
+// parent re-render.
 
-/// Number pad input where the value is a String (e.g. Tiebreak point fields).
-struct NumberStringInputField: UIViewRepresentable {
-    var placeholder: String = "0"
-    @Binding var text: String
-
-    func makeUIView(context: Context) -> UITextField {
-        let f = UITextField()
-        f.keyboardType       = .numberPad
-        f.textAlignment      = .center
-        f.font               = .monospacedDigitSystemFont(ofSize: 20, weight: .bold)
-        f.placeholder        = placeholder
-        f.autocorrectionType = .no
-        f.spellCheckingType  = .no
-        f.delegate           = context.coordinator
-        return f
+private final class LockedKeyboardTextField: UITextField {
+    private let lockedType: UIKeyboardType
+    init(keyboardType: UIKeyboardType) {
+        lockedType = keyboardType
+        super.init(frame: .zero)
+        super.keyboardType = keyboardType
     }
-
-    func updateUIView(_ f: UITextField, context: Context) {
-        context.coordinator.binding = $text
-        if f.keyboardType != .numberPad { f.keyboardType = .numberPad }
-        if !f.isFirstResponder { f.text = text }
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
-
-    final class Coordinator: NSObject, UITextFieldDelegate {
-        var binding: Binding<String>
-        init(text: Binding<String>) { self.binding = text }
-
-        func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
-                       replacementString s: String) -> Bool {
-            s.isEmpty || s.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
-        }
-
-        func textFieldDidEndEditing(_ f: UITextField) {
-            binding.wrappedValue = f.text ?? ""
-        }
-
-        func textFieldShouldReturn(_ f: UITextField) -> Bool {
-            f.resignFirstResponder(); return true
-        }
+    required init?(coder: NSCoder) { fatalError() }
+    override var keyboardType: UIKeyboardType {
+        get { lockedType }
+        set { }  // intentional no-op
     }
 }
 
-/// Decimal pad input where the value is a String (e.g. payment amount fields).
-struct DecimalInputField: UIViewRepresentable {
-    var placeholder: String = "0,00"
+// Shared coordinator used by both String-binding wrappers below.
+final class KBInputCoordinator: NSObject, UITextFieldDelegate {
+    var binding: Binding<String>
+    private let target: UIKeyboardType
+    private let allowed: CharacterSet
+
+    init(text: Binding<String>, target: UIKeyboardType) {
+        self.binding = text
+        self.target  = target
+        self.allowed = target == .decimalPad
+            ? CharacterSet.decimalDigits.union(CharacterSet(charactersIn: ",."))
+            : .decimalDigits
+    }
+
+    func textFieldDidBeginEditing(_ f: UITextField) {
+        // Safety net: force correct keyboard if iOS reset it somehow.
+        if f.keyboardType != target {
+            f.keyboardType = target
+            f.reloadInputViews()
+        }
+    }
+
+    func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
+                   replacementString s: String) -> Bool {
+        s.isEmpty || s.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+
+    func textFieldDidEndEditing(_ f: UITextField) { binding.wrappedValue = f.text ?? "" }
+    func textFieldShouldReturn(_ f: UITextField) -> Bool { f.resignFirstResponder(); return true }
+}
+
+/// Number pad, String binding (e.g. Tiebreak point fields).
+struct NumberStringInputField: UIViewRepresentable {
+    typealias Coordinator = KBInputCoordinator
+    var placeholder: String = "0"
     @Binding var text: String
 
-    func makeUIView(context: Context) -> UITextField {
-        let f = UITextField()
-        f.keyboardType       = .decimalPad
-        f.textAlignment      = .right
-        f.font               = .systemFont(ofSize: 17)
-        f.placeholder        = placeholder
-        f.autocorrectionType = .no
-        f.spellCheckingType  = .no
-        f.delegate           = context.coordinator
+    func makeUIView(context: Context) -> LockedKeyboardTextField {
+        let f = LockedKeyboardTextField(keyboardType: .numberPad)
+        f.textAlignment = .center
+        f.font = .monospacedDigitSystemFont(ofSize: 20, weight: .bold)
+        f.placeholder = placeholder
+        f.autocorrectionType = .no; f.spellCheckingType = .no
+        f.delegate = context.coordinator
         return f
     }
 
-    func updateUIView(_ f: UITextField, context: Context) {
+    func updateUIView(_ f: LockedKeyboardTextField, context: Context) {
         context.coordinator.binding = $text
-        if f.keyboardType != .decimalPad { f.keyboardType = .decimalPad }
         if !f.isFirstResponder { f.text = text }
     }
 
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+    func makeCoordinator() -> KBInputCoordinator { KBInputCoordinator(text: $text, target: .numberPad) }
+}
 
-    final class Coordinator: NSObject, UITextFieldDelegate {
-        var binding: Binding<String>
-        init(text: Binding<String>) { self.binding = text }
+/// Decimal pad, String binding (e.g. payment amount fields).
+struct DecimalInputField: UIViewRepresentable {
+    typealias Coordinator = KBInputCoordinator
+    var placeholder: String = "0,00"
+    @Binding var text: String
 
-        func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
-                       replacementString s: String) -> Bool {
-            s.isEmpty || s.unicodeScalars.allSatisfy {
-                CharacterSet.decimalDigits.union(CharacterSet(charactersIn: ",.")).contains($0)
-            }
-        }
-
-        func textFieldDidEndEditing(_ f: UITextField) {
-            binding.wrappedValue = f.text ?? ""
-        }
-
-        func textFieldShouldReturn(_ f: UITextField) -> Bool {
-            f.resignFirstResponder(); return true
-        }
+    func makeUIView(context: Context) -> LockedKeyboardTextField {
+        let f = LockedKeyboardTextField(keyboardType: .decimalPad)
+        f.textAlignment = .right
+        f.font = .systemFont(ofSize: 17)
+        f.placeholder = placeholder
+        f.autocorrectionType = .no; f.spellCheckingType = .no
+        f.delegate = context.coordinator
+        return f
     }
+
+    func updateUIView(_ f: LockedKeyboardTextField, context: Context) {
+        context.coordinator.binding = $text
+        if !f.isFirstResponder { f.text = text }
+    }
+
+    func makeCoordinator() -> KBInputCoordinator { KBInputCoordinator(text: $text, target: .decimalPad) }
 }
