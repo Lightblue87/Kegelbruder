@@ -101,7 +101,7 @@ final class SQLiteStore {
         let defaults: [(String, Double)] = [
             ("Startgeld", 5.0), ("Pumpe", 0.5), ("Neuner", 1.0), ("Kranz", 2.0),
             ("Strafe Stamm", 7.5), ("Bahngebühr", 30.0),
-            ("Kassenstand", 0.0), ("Letzte_Startgebuehren", 0.0)
+            ("Kassenstand", 0.0), ("Kontostand", 0.0), ("Letzte_Startgebuehren", 0.0)
         ]
         for (key, val) in defaults {
             try exec("INSERT OR IGNORE INTO kasse_einstellungen (schluessel, wert) VALUES (?, ?)",
@@ -295,7 +295,7 @@ final class SQLiteStore {
             ) { row in transaktionen.append(row.text(0)) }
 
             entries.append(HistorieEntry(
-                datum: datum, players: players,
+                spielId: spielId, datum: datum, players: players,
                 transaktionen: transaktionen, spieler_reihenfolge: reihenfolge
             ))
         }

@@ -7,25 +7,49 @@ struct ArchiveView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(entries, selection: $selected) { entry in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(entry.datum)
-                        .font(.headline)
-                    HStack {
-                        Label("\(entry.players.count) Spieler", systemImage: "person.2")
-                        Spacer()
-                        Label("\(entry.transaktionen.count) Buchungen", systemImage: "list.bullet")
+            Group {
+                if entries.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 44))
+                            .foregroundColor(.secondary)
+                        Text("Noch keine Spiele archiviert")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        Text("Gespiele werden nach der Abrechnung hier gespeichert.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
                     }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List(entries, selection: $selected) { entry in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(entry.datum)
+                                .font(.headline)
+                            HStack {
+                                Label("\(entry.players.count) Spieler", systemImage: "person.2")
+                                Spacer()
+                                Label("\(entry.transaktionen.count) Buchungen", systemImage: "list.bullet")
+                            }
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                        .tag(entry)
+                    }
                 }
-                .padding(.vertical, 4)
-                .tag(entry)
             }
             .navigationTitle("Archiv")
-            .onAppear {
-                entries = vm.store.ladeHistorie().reversed()
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { laden() } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
             }
+            .onAppear { laden() }
         } detail: {
             if let entry = selected {
                 ArchiveDetailView(entry: entry)
@@ -35,6 +59,10 @@ struct ArchiveView: View {
                     .font(.title2)
             }
         }
+    }
+
+    private func laden() {
+        entries = Array(vm.store.ladeHistorie().reversed())
     }
 }
 

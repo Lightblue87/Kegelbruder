@@ -28,6 +28,9 @@ class AppViewModel: ObservableObject {
     @Published var pendingAttendees: [String] = []
     @Published var pendingGäste: [Player] = []
 
+    // MARK: - Error state
+    @Published var archivFehler: String? = nil
+
     // MARK: - Navigation state
     @Published var activeSheet: AppSheet? = nil
     @Published var showLockWarning: Bool = false
@@ -412,12 +415,16 @@ class AppViewModel: ObservableObject {
         })
         let spieltagTransaktionen = Array(kasse.Transaktionen.dropFirst(archiveStartIndex))
 
-        store.archivierSpiel(
-            datum: datum,
-            players: archivePlayers,
-            transaktionen: spieltagTransaktionen,
-            reihenfolge: uniqueNames(players.map { $0.name })
-        )
+        do {
+            try store.archivierSpiel(
+                datum: datum,
+                players: archivePlayers,
+                transaktionen: spieltagTransaktionen,
+                reihenfolge: uniqueNames(players.map { $0.name })
+            )
+        } catch {
+            archivFehler = "Spiel konnte nicht archiviert werden: \(error.localizedDescription)"
+        }
 
         // Reset game state
         abgerechnet = true
@@ -478,9 +485,11 @@ class AppViewModel: ObservableObject {
 
     // MARK: - Cash management
 
-    func einzahlen(betrag: Double, beschreibung: String, spielerName: String? = nil) {
+    func einzahlen(betrag: Double, beschreibung: String, spielerName: String? = nil, konto: Bool = false) {
         guard betrag > 0 else { return }
-        _ = addEinzahlung(betrag: betrag, beschreibung: beschreibung)
+        _ = konto
+            ? addEinzahlungKonto(betrag: betrag, beschreibung: beschreibung)
+            : addEinzahlung(betrag: betrag, beschreibung: beschreibung)
 
         if let name = spielerName {
             var m = store.ladeMitglieder()
@@ -494,9 +503,32 @@ class AppViewModel: ObservableObject {
         store.speichereKasse(kasse)
     }
 
-    func auszahlen(betrag: Double, beschreibung: String) {
+    func auszahlen(betrag: Double, beschreibung: String, konto: Bool = false) {
+        let balance = konto ? kasse.Kontostand : kasse.Kassenstand
+        guard betrag > 0, betrag <= balance else { return }
+        _ = konto
+            ? addAuszahlungKonto(betrag: betrag, beschreibung: beschreibung)
+            : addAuszahlung(betrag: betrag, beschreibung: beschreibung)
+        store.speichereKasse(kasse)
+    }
+
+    func umbuchenBarZuKonto(betrag: Double) {
         guard betrag > 0, betrag <= kasse.Kassenstand else { return }
-        _ = addAuszahlung(betrag: betrag, beschreibung: beschreibung)
+        let wert = round2(betrag)
+        let d = formatDatum(Date())
+        kasse.Kassenstand = max(0, kasse.Kassenstand - wert)
+        kasse.Kontostand += wert
+        kasse.Transaktionen.append("\(d) | Umbuchung Bar → Konto: \(String(format: "%.2f", wert))€")
+        store.speichereKasse(kasse)
+    }
+
+    func umbuchenKontoZuBar(betrag: Double) {
+        guard betrag > 0, betrag <= kasse.Kontostand else { return }
+        let wert = round2(betrag)
+        let d = formatDatum(Date())
+        kasse.Kontostand = max(0, kasse.Kontostand - wert)
+        kasse.Kassenstand += wert
+        kasse.Transaktionen.append("\(d) | Umbuchung Konto → Bar: +\(String(format: "%.2f", wert))€")
         store.speichereKasse(kasse)
     }
 
@@ -675,6 +707,26 @@ class AppViewModel: ObservableObject {
         let d = datum ?? formatDatum(Date())
         kasse.Kassenstand = max(0, kasse.Kassenstand - wert)
         let text = "\(d) | -\(String(format: "%.2f", wert))€: \(beschreibung)"
+        kasse.Transaktionen.append(text)
+        return text
+    }
+
+    @discardableResult
+    private func addEinzahlungKonto(betrag: Double, beschreibung: String) -> String {
+        let wert = round2(betrag)
+        let d = formatDatum(Date())
+        kasse.Kontostand += wert
+        let text = "[Konto] \(d) | +\(String(format: "%.2f", wert))€: \(beschreibung)"
+        kasse.Transaktionen.append(text)
+        return text
+    }
+
+    @discardableResult
+    private func addAuszahlungKonto(betrag: Double, beschreibung: String) -> String {
+        let wert = round2(betrag)
+        let d = formatDatum(Date())
+        kasse.Kontostand = max(0, kasse.Kontostand - wert)
+        let text = "[Konto] \(d) | -\(String(format: "%.2f", wert))€: \(beschreibung)"
         kasse.Transaktionen.append(text)
         return text
     }

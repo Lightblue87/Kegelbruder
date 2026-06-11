@@ -74,6 +74,14 @@ struct ContentView: View {
         } message: {
             Text("Alle Punkte und Startgebühren dieses Spiels werden zurückgesetzt. Diese Aktion kann nicht rückgängig gemacht werden.")
         }
+        .alert("Archivierungsfehler", isPresented: Binding(
+            get: { vm.archivFehler != nil },
+            set: { if !$0 { vm.archivFehler = nil } }
+        )) {
+            Button("OK") { vm.archivFehler = nil }
+        } message: {
+            Text(vm.archivFehler ?? "")
+        }
     }
 
     @ViewBuilder

@@ -162,6 +162,7 @@ class DataStore: ObservableObject {
             Strafe_Stamm:           e["Strafe Stamm"]           ?? 7.5,
             Bahngebuehr:            e["Bahngebühr"]             ?? 30.0,
             Kassenstand:            e["Kassenstand"]            ?? 0.0,
+            Kontostand:             e["Kontostand"]             ?? 0.0,
             Transaktionen:          db.ladeTransaktionen(),
             Letzte_Startgebuehren:  e["Letzte_Startgebuehren"]  ?? 0.0
         )
@@ -176,6 +177,7 @@ class DataStore: ObservableObject {
             "Strafe Stamm":          file.Strafe_Stamm,
             "Bahngebühr":            file.Bahngebuehr,
             "Kassenstand":           file.Kassenstand,
+            "Kontostand":            file.Kontostand,
             "Letzte_Startgebuehren": file.Letzte_Startgebuehren
         ]
         try? sqlite?.speichereKasse(einstellungen: einstellungen,
@@ -195,9 +197,9 @@ class DataStore: ObservableObject {
     func ladeHistorie() -> [HistorieEntry] { sqlite?.ladeHistorie() ?? [] }
 
     func archivierSpiel(datum: String, players: [String: PlayerData],
-                        transaktionen: [String], reihenfolge: [String]) {
-        try? sqlite?.archivierSpiel(datum: datum, players: players,
-                                    transaktionen: transaktionen, reihenfolge: reihenfolge)
+                        transaktionen: [String], reihenfolge: [String]) throws {
+        try sqlite?.archivierSpiel(datum: datum, players: players,
+                                   transaktionen: transaktionen, reihenfolge: reihenfolge)
     }
 
     // MARK: - Lock
