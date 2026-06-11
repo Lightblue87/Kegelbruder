@@ -198,10 +198,8 @@ struct ScoreCell: View {
     }
 }
 
-// LockedKeyboardTextField for integer score input — same pattern as in DesignSystem
-// but scoped to this file (DesignSystem's version is private).
 private final class LockedNumberTextField: UITextField {
-    var isDark: Bool = false
+    var isDark: Bool = false { didSet { if oldValue != isDark { syncInputView() } } }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -214,15 +212,26 @@ private final class LockedNumberTextField: UITextField {
         set { super.keyboardType = .numberPad }
     }
 
+    func syncInputView() {
+        if isDark && UIDevice.current.userInterfaceIdiom == .pad {
+            let pad = DarkNumberPad(allowsDecimal: false)
+            pad.onInsert = { [weak self] s in self?.insertText(s) }
+            pad.onDelete = { [weak self] in self?.deleteBackward() }
+            inputView = pad
+        } else {
+            inputView = nil
+            super.keyboardAppearance = isDark ? .dark : .default
+        }
+        if isFirstResponder { reloadInputViews() }
+    }
+
     override func becomeFirstResponder() -> Bool {
-        applyAppearance()
+        if inputView == nil { super.keyboardAppearance = isDark ? .dark : .default }
         let ok = super.becomeFirstResponder()
-        if ok {
+        if ok && inputView == nil {
             NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(keyboardFullyShown),
-                name: UIResponder.keyboardDidShowNotification,
-                object: nil
+                self, selector: #selector(keyboardFullyShown),
+                name: UIResponder.keyboardDidShowNotification, object: nil
             )
         }
         return ok
@@ -239,15 +248,10 @@ private final class LockedNumberTextField: UITextField {
         NotificationCenter.default.removeObserver(
             self, name: UIResponder.keyboardDidShowNotification, object: nil
         )
-        guard isFirstResponder else { return }
+        guard isFirstResponder, inputView == nil else { return }
         super.keyboardType = .numberPad
-        applyAppearance()
-        reloadInputViews()
-    }
-
-    private func applyAppearance() {
         super.keyboardAppearance = isDark ? .dark : .default
-        overrideUserInterfaceStyle = isDark ? .dark : .unspecified
+        reloadInputViews()
     }
 }
 

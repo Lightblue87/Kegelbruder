@@ -318,19 +318,74 @@ struct KBRowDivider: View {
     }
 }
 
+// MARK: - Dark number pad (custom inputView for iPad dark mode)
+//
+// The iPad compact floating keyboard popup (shown when a hardware keyboard is
+// connected) is a system-level overlay in its own window — neither
+// keyboardAppearance nor overrideUserInterfaceStyle on the UITextField can
+// affect it. The only reliable fix is to replace the system keyboard entirely
+// with a custom inputView on iPad in dark mode.
+final class DarkNumberPad: UIInputView {
+    var onInsert: (String) -> Void = { _ in }
+    var onDelete: () -> Void = {}
+
+    init(allowsDecimal: Bool = false) {
+        super.init(frame: .zero, inputViewStyle: .keyboard)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = UIColor(white: 0.14, alpha: 1)
+        let dec = allowsDecimal ? (Locale.current.decimalSeparator ?? ",") : nil
+        let layout: [[String?]] = [
+            ["1","2","3"], ["4","5","6"], ["7","8","9"], [dec,"0","⌫"]
+        ]
+        let vStack = UIStackView()
+        vStack.axis = .vertical; vStack.distribution = .fillEqually; vStack.spacing = 6
+        vStack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(vStack)
+        NSLayoutConstraint.activate([
+            vStack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
+            vStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
+            vStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            vStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8)
+        ])
+        for row in layout {
+            let hStack = UIStackView()
+            hStack.axis = .horizontal; hStack.distribution = .fillEqually; hStack.spacing = 6
+            for key in row {
+                if let key = key {
+                    let btn = UIButton(type: .system)
+                    btn.setTitle(key, for: .normal)
+                    btn.setTitleColor(UIColor(white: 0.95, alpha: 1), for: .normal)
+                    let isAction = key == "⌫" || key == dec
+                    btn.titleLabel?.font = isAction
+                        ? .systemFont(ofSize: 22)
+                        : .systemFont(ofSize: 28, weight: .light)
+                    btn.backgroundColor = isAction
+                        ? UIColor(white: 0.24, alpha: 1)
+                        : UIColor(white: 0.32, alpha: 1)
+                    btn.layer.cornerRadius = 10
+                    btn.addTarget(self, action: #selector(tap(_:)), for: .touchUpInside)
+                    hStack.addArrangedSubview(btn)
+                } else {
+                    let ph = UIView(); ph.backgroundColor = UIColor(white: 0.14, alpha: 1)
+                    hStack.addArrangedSubview(ph)
+                }
+            }
+            vStack.addArrangedSubview(hStack)
+        }
+    }
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: 248)
+    }
+
+    @objc private func tap(_ sender: UIButton) {
+        guard let t = sender.currentTitle else { return }
+        t == "⌫" ? onDelete() : onInsert(t)
+    }
+}
+
 // MARK: - UITextField wrappers (stable keyboard type on iPad)
-//
-// Root cause of the "full keyboard on second tap" bug:
-// iOS can reset UITextField.keyboardType to .default between SwiftUI render
-// passes. Neither makeUIView nor updateUIView fire at the exact moment
-// the keyboard appears, so corrections there are too late.
-//
-// Fix uses two layers:
-//   1. LockedKeyboardTextField subclass — overrides the keyboardType setter
-//      to a no-op so nothing can ever change the type after init.
-//   2. textFieldDidBeginEditing in the coordinator — fires at the instant
-//      UIKit makes the field first responder. If, against all odds, the type
-//      was changed, we detect and reload before the keyboard animates in.
 //
 // The Coordinator holds a plain Binding (not @Binding) refreshed in
 // updateUIView — required when the caller creates an inline Binding closure
@@ -339,9 +394,7 @@ struct KBRowDivider: View {
 
 final class LockedKeyboardTextField: UITextField {
     private let lockedType: UIKeyboardType
-    // Stored separately so becomeFirstResponder and keyboardFullyShown
-    // can re-assert appearance at the right moments without needing SwiftUI.
-    var isDark: Bool = false
+    var isDark: Bool = false { didSet { if oldValue != isDark { syncInputView() } } }
 
     init(keyboardType: UIKeyboardType) {
         lockedType = keyboardType
@@ -355,15 +408,29 @@ final class LockedKeyboardTextField: UITextField {
         set { super.keyboardType = lockedType }
     }
 
+    // On iPad, replace the system keyboard with our own dark pad when in dark mode.
+    // On iPhone (or light mode), fall back to the system keyboard with keyboardAppearance.
+    func syncInputView() {
+        if isDark && UIDevice.current.userInterfaceIdiom == .pad {
+            let pad = DarkNumberPad(allowsDecimal: lockedType == .decimalPad)
+            pad.onInsert = { [weak self] s in self?.insertText(s) }
+            pad.onDelete = { [weak self] in self?.deleteBackward() }
+            inputView = pad
+        } else {
+            inputView = nil
+            super.keyboardAppearance = isDark ? .dark : .default
+        }
+        if isFirstResponder { reloadInputViews() }
+    }
+
+    // System keyboard path only: lock type and appearance after keyboard animates in.
     override func becomeFirstResponder() -> Bool {
-        applyAppearance()
+        if inputView == nil { super.keyboardAppearance = isDark ? .dark : .default }
         let ok = super.becomeFirstResponder()
-        if ok {
+        if ok && inputView == nil {
             NotificationCenter.default.addObserver(
-                self,
-                selector: #selector(keyboardFullyShown),
-                name: UIResponder.keyboardDidShowNotification,
-                object: nil
+                self, selector: #selector(keyboardFullyShown),
+                name: UIResponder.keyboardDidShowNotification, object: nil
             )
         }
         return ok
@@ -380,19 +447,10 @@ final class LockedKeyboardTextField: UITextField {
         NotificationCenter.default.removeObserver(
             self, name: UIResponder.keyboardDidShowNotification, object: nil
         )
-        guard isFirstResponder else { return }
+        guard isFirstResponder, inputView == nil else { return }
         super.keyboardType = lockedType
-        applyAppearance()
-        reloadInputViews()
-    }
-
-    private func applyAppearance() {
-        // keyboardAppearance handles full-width keyboards.
-        // overrideUserInterfaceStyle forces the compact floating keyboard on iPad
-        // (hardware keyboard attached) to respect dark mode — it inherits its
-        // traitCollection from the first responder, not from keyboardAppearance.
         super.keyboardAppearance = isDark ? .dark : .default
-        overrideUserInterfaceStyle = isDark ? .dark : .unspecified
+        reloadInputViews()
     }
 }
 
@@ -447,7 +505,7 @@ struct NumberStringInputField: UIViewRepresentable {
         f.placeholder = placeholder
         f.autocorrectionType = .no; f.spellCheckingType = .no
         f.isDark = colorScheme == .dark
-        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
+        f.syncInputView()
         f.delegate = context.coordinator
         return f
     }
@@ -455,8 +513,7 @@ struct NumberStringInputField: UIViewRepresentable {
     func updateUIView(_ f: LockedKeyboardTextField, context: Context) {
         context.coordinator.binding = $text
         if !f.isFirstResponder { f.text = text }
-        f.isDark = colorScheme == .dark
-        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
+        f.isDark = colorScheme == .dark   // triggers syncInputView() via didSet
     }
 
     func makeCoordinator() -> KBInputCoordinator { KBInputCoordinator(text: $text, target: .numberPad) }
@@ -476,7 +533,7 @@ struct DecimalInputField: UIViewRepresentable {
         f.placeholder = placeholder
         f.autocorrectionType = .no; f.spellCheckingType = .no
         f.isDark = colorScheme == .dark
-        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
+        f.syncInputView()
         f.delegate = context.coordinator
         return f
     }
@@ -485,7 +542,6 @@ struct DecimalInputField: UIViewRepresentable {
         context.coordinator.binding = $text
         if !f.isFirstResponder { f.text = text }
         f.isDark = colorScheme == .dark
-        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
     }
 
     func makeCoordinator() -> KBInputCoordinator { KBInputCoordinator(text: $text, target: .decimalPad) }
