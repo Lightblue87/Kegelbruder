@@ -317,3 +317,101 @@ struct KBRowDivider: View {
             .padding(.leading, 16)
     }
 }
+
+// MARK: - UITextField wrappers (stable keyboard type on iPad)
+// SwiftUI's .keyboardType() modifier briefly shows the wrong keyboard before
+// switching on iPad. UIViewRepresentable sets the type at UIKit level so it
+// never flickers. The Coordinator holds a plain Binding (not @Binding) that
+// is refreshed in updateUIView — necessary when the caller creates an inline
+// Binding closure that captures a value-type (struct), which becomes stale
+// after any parent re-render.
+
+/// Number pad input where the value is a String (e.g. Tiebreak point fields).
+struct NumberStringInputField: UIViewRepresentable {
+    var placeholder: String = "0"
+    @Binding var text: String
+
+    func makeUIView(context: Context) -> UITextField {
+        let f = UITextField()
+        f.keyboardType       = .numberPad
+        f.textAlignment      = .center
+        f.font               = .monospacedDigitSystemFont(ofSize: 20, weight: .bold)
+        f.placeholder        = placeholder
+        f.autocorrectionType = .no
+        f.spellCheckingType  = .no
+        f.delegate           = context.coordinator
+        return f
+    }
+
+    func updateUIView(_ f: UITextField, context: Context) {
+        context.coordinator.binding = $text
+        if f.keyboardType != .numberPad { f.keyboardType = .numberPad }
+        if !f.isFirstResponder { f.text = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var binding: Binding<String>
+        init(text: Binding<String>) { self.binding = text }
+
+        func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
+                       replacementString s: String) -> Bool {
+            s.isEmpty || s.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
+        }
+
+        func textFieldDidEndEditing(_ f: UITextField) {
+            binding.wrappedValue = f.text ?? ""
+        }
+
+        func textFieldShouldReturn(_ f: UITextField) -> Bool {
+            f.resignFirstResponder(); return true
+        }
+    }
+}
+
+/// Decimal pad input where the value is a String (e.g. payment amount fields).
+struct DecimalInputField: UIViewRepresentable {
+    var placeholder: String = "0,00"
+    @Binding var text: String
+
+    func makeUIView(context: Context) -> UITextField {
+        let f = UITextField()
+        f.keyboardType       = .decimalPad
+        f.textAlignment      = .right
+        f.font               = .systemFont(ofSize: 17)
+        f.placeholder        = placeholder
+        f.autocorrectionType = .no
+        f.spellCheckingType  = .no
+        f.delegate           = context.coordinator
+        return f
+    }
+
+    func updateUIView(_ f: UITextField, context: Context) {
+        context.coordinator.binding = $text
+        if f.keyboardType != .decimalPad { f.keyboardType = .decimalPad }
+        if !f.isFirstResponder { f.text = text }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
+
+    final class Coordinator: NSObject, UITextFieldDelegate {
+        var binding: Binding<String>
+        init(text: Binding<String>) { self.binding = text }
+
+        func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
+                       replacementString s: String) -> Bool {
+            s.isEmpty || s.unicodeScalars.allSatisfy {
+                CharacterSet.decimalDigits.union(CharacterSet(charactersIn: ",.")).contains($0)
+            }
+        }
+
+        func textFieldDidEndEditing(_ f: UITextField) {
+            binding.wrappedValue = f.text ?? ""
+        }
+
+        func textFieldShouldReturn(_ f: UITextField) -> Bool {
+            f.resignFirstResponder(); return true
+        }
+    }
+}

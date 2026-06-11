@@ -243,59 +243,6 @@ struct AttendanceView: View {
     }
 }
 
-// UITextField wrapper for decimal payment amounts.
-// SwiftUI's .keyboardType(.decimalPad) modifier flickers to the full keyboard
-// for ~1 second on iPad before switching — using UIViewRepresentable prevents this.
-private struct DecimalInputField: UIViewRepresentable {
-    var placeholder: String = "0,00"
-    @Binding var text: String
-
-    func makeUIView(context: Context) -> UITextField {
-        let field = UITextField()
-        field.keyboardType       = .decimalPad
-        field.textAlignment      = .right
-        field.font               = .systemFont(ofSize: 17)
-        field.placeholder        = placeholder
-        field.autocorrectionType = .no
-        field.spellCheckingType  = .no
-        field.delegate           = context.coordinator
-        return field
-    }
-
-    func updateUIView(_ field: UITextField, context: Context) {
-        context.coordinator.binding = $text
-        if field.keyboardType != .decimalPad {
-            field.keyboardType = .decimalPad
-        }
-        if !field.isFirstResponder {
-            field.text = text
-        }
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(text: $text) }
-
-    final class Coordinator: NSObject, UITextFieldDelegate {
-        var binding: Binding<String>
-        init(text: Binding<String>) { self.binding = text }
-
-        func textField(_ textField: UITextField,
-                       shouldChangeCharactersIn range: NSRange,
-                       replacementString string: String) -> Bool {
-            let allowed = CharacterSet.decimalDigits.union(CharacterSet(charactersIn: ",."))
-            return string.isEmpty || string.unicodeScalars.allSatisfy { allowed.contains($0) }
-        }
-
-        func textFieldDidEndEditing(_ field: UITextField) {
-            binding.wrappedValue = field.text ?? ""
-        }
-
-        func textFieldShouldReturn(_ field: UITextField) -> Bool {
-            field.resignFirstResponder()
-            return true
-        }
-    }
-}
-
 private struct NeuerGast: Identifiable {
     let id = UUID()
     var name: String

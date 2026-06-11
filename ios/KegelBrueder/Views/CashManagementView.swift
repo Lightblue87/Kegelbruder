@@ -50,11 +50,8 @@ struct CashManagementView: View {
                 HStack {
                     Text("Betrag (€)")
                     Spacer()
-                    TextField("0,00", text: $betrag)
-                        .keyboardType(.decimalPad)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 100)
-                        .monospacedDigit()
+                    DecimalInputField(text: $betrag)
+                        .frame(width: 100, height: 32)
                 }
 
                 TextField("Beschreibung", text: $beschreibung)

@@ -202,10 +202,8 @@ struct BetragField: View {
         HStack {
             Text(label)
             Spacer()
-            TextField("0,00", text: $value)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 80)
+            DecimalInputField(text: $value)
+                .frame(width: 80, height: 32)
             Text("€").foregroundColor(.secondary)
         }
     }

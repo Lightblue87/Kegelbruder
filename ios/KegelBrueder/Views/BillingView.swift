@@ -111,7 +111,7 @@ struct BillingRowView: View {
                     Text("Gezahlt")
                         .font(.system(size: 12))
                         .foregroundColor(.kbTextSecondary)
-                    TextField("0,00", text: Binding(
+                    DecimalInputField(text: Binding(
                         get: { gezahlt[row.player.name] ?? "" },
                         set: { val in
                             gezahlt[row.player.name] = val
@@ -119,10 +119,7 @@ struct BillingRowView: View {
                             if let d = Double(cleaned) { row.gezahlt = d }
                         }
                     ))
-                    .keyboardType(.decimalPad)
-                    .multilineTextAlignment(.trailing)
-                    .monospacedDigit()
-                    .frame(width: 80)
+                    .frame(width: 80, height: 32)
                     .padding(6)
                     .background(Color(UIColor.secondarySystemGroupedBackground))
                     .cornerRadius(8)

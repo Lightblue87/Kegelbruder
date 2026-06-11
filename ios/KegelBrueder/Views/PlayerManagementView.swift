@@ -109,10 +109,8 @@ struct PlayerEditSheet: View {
                         HStack {
                             Text("Offener Betrag (€)")
                             Spacer()
-                            TextField("0,00", text: $schulden)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 80)
+                            DecimalInputField(text: $schulden)
+                                .frame(width: 80, height: 32)
                         }
                     }
                 }
