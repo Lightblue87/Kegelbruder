@@ -11,6 +11,9 @@ struct PumpenTiebreakView: View {
     @State private var runde: Int = 1
     @State private var inputs: [PlayerInput] = []
     @State private var aufgelöst: Bool = false
+    // Local accumulator — intentionally NOT written to vm.tiebreakExtras so that
+    // Pumpenstechen data doesn't contaminate the Punktestechen check in getTiedPlayers().
+    @State private var pumpExtras: [String: Int] = [:]
 
     var body: some View {
         NavigationStack {
@@ -105,33 +108,18 @@ struct PumpenTiebreakView: View {
     }
 
     private func auswerten() {
-        // Accumulate this round's stats
         for inp in inputs {
-            vm.addTiebreakStats(
-                name: inp.name,
-                pumpen: inp.pumpen,
-                neuner: inp.neuner,
-                kranz:  inp.kranz,
-                punkte: Int(inp.punkte) ?? 0
-            )
+            pumpExtras[inp.name, default: 0] += Int(inp.punkte) ?? 0
         }
 
-        // Build cumulative punkte table
-        let kum: [(name: String, punkte: Int)] = inputs.map { inp in
-            let extra = vm.tiebreakExtras[inp.name] ?? TiebreakExtra()
-            return (inp.name, extra.punkte)
-        }
-
-        let maxPts = kum.map { $0.punkte }.max() ?? 0
-        let minPts = kum.map { $0.punkte }.min() ?? 0
+        let maxPts = pumpExtras.values.max() ?? 0
+        let minPts = pumpExtras.values.min() ?? 0
 
         if maxPts != minPts {
-            // Resolved: order highest→lowest; winner gets pump rank 0
-            let ordered = kum.sorted { $0.punkte > $1.punkte }.map { $0.name }
+            let ordered = pumpExtras.sorted { $0.value > $1.value }.map { $0.key }
             vm.setPumpRank(ordered: ordered)
             aufgelöst = true
         } else {
-            // Still tied — another round
             runde += 1
             inputs = inputs.map { PlayerInput(name: $0.name) }
         }
