@@ -127,6 +127,8 @@ struct ContentView: View {
             ArchiveView().environmentObject(vm)
         case .tiebreak:
             TiebreakView().environmentObject(vm)
+        case .pumpenStechen:
+            PumpenTiebreakView().environmentObject(vm)
         }
     }
 }

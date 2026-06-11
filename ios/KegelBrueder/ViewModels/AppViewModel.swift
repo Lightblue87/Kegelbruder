@@ -19,6 +19,7 @@ class AppViewModel: ObservableObject {
     // MARK: - Billing state
     @Published var billingRows: [BillingRow] = []
     @Published var tiebreakExtras: [String: TiebreakExtra] = [:]
+    @Published var pumpRank: [String: Int] = [:]  // rank 0 = winner of Pumpenstechen
 
     // MARK: - Session rollback
     private var sessionTx: [(kind: String, betrag: Double, text: String)] = []
@@ -40,7 +41,7 @@ class AppViewModel: ObservableObject {
     @Published var onLockOverride: (() -> Void)? = nil
 
     enum AppSheet: Identifiable {
-        case attendance, playerSort, game, billing, cash, players, settings, archive, tiebreak
+        case attendance, playerSort, game, billing, cash, players, settings, archive, tiebreak, pumpenStechen
         var id: String { "\(self)" }
     }
 
@@ -118,6 +119,7 @@ class AppViewModel: ObservableObject {
         pendingAttendees = []
         pendingGäste = []
         tiebreakExtras = [:]
+        pumpRank = [:]
         runde = 1
         abgerechnet = false
         activeSheet = .attendance
@@ -259,7 +261,13 @@ class AppViewModel: ObservableObject {
             spielAbbrechen()
             return
         }
-        activeSheet = hasTrueTie() ? .tiebreak : .billing
+        if brauchtPumpenstechen() {
+            activeSheet = .pumpenStechen
+        } else if hasTrueTie() {
+            activeSheet = .tiebreak
+        } else {
+            activeSheet = .billing
+        }
     }
 
     var hatRundenpunkte: Bool {
@@ -307,6 +315,10 @@ class AppViewModel: ObservableObject {
                         (tiebreakExtras[$0.name]?.punkte ?? 0) > (tiebreakExtras[$1.name]?.punkte ?? 0)
                     }
                     result.append(contentsOf: byTiebreak)
+                } else if !pumpRank.isEmpty {
+                    // Pumpenstechen was resolved: sort by pump rank (lower = better position)
+                    let byRank = gruppe.sorted { (pumpRank[$0.name] ?? Int.max) < (pumpRank[$1.name] ?? Int.max) }
+                    result.append(contentsOf: byRank)
                 } else {
                     // Normal pumpen tiebreak (most pumpen → worst rank)
                     let pumpenCounts = gruppe.map { $0.pumpen }
@@ -430,6 +442,7 @@ class AppViewModel: ObservableObject {
         abgerechnet = true
         gameRunning = false
         tiebreakExtras = [:]
+        pumpRank = [:]
         sessionTx = []
         preSessionSchulden = [:]
         pendingAttendees = []
@@ -473,6 +486,7 @@ class AppViewModel: ObservableObject {
         sessionTx = []
         preSessionSchulden = [:]
         tiebreakExtras = [:]
+        pumpRank = [:]
         pendingAttendees = []
         pendingGäste = []
         players = []
@@ -579,9 +593,17 @@ class AppViewModel: ObservableObject {
             while j < sorted.count && sorted[j].summe == sorted[i].summe { j += 1 }
             let gruppe = Array(sorted[i..<j])
             if gruppe.count >= 2 {
-                // If tiebreak was already played and resolved by punkte, no further tiebreak needed
+                // Resolved by Punktestechen punkte
                 let tiebreakPunkte = gruppe.map { tiebreakExtras[$0.name]?.punkte ?? 0 }
                 if Set(tiebreakPunkte).count > 1 { i = j; continue }
+
+                // Resolved by Pumpenstechen: all members have distinct pump ranks
+                if !pumpRank.isEmpty {
+                    let ranks = gruppe.compactMap { pumpRank[$0.name] }
+                    if ranks.count == gruppe.count && Set(ranks).count == gruppe.count {
+                        i = j; continue
+                    }
+                }
 
                 let pumpenCounts = gruppe.map { $0.pumpen + (tiebreakExtras[$0.name]?.pumpen ?? 0) }
                 let allSamePumpen = Set(pumpenCounts).count == 1
@@ -601,6 +623,25 @@ class AppViewModel: ObservableObject {
         extra.kranz  += kranz
         extra.punkte += punkte
         tiebreakExtras[name] = extra
+    }
+
+    // True when multiple players share the globally highest pumpen count (uses base game count only)
+    func brauchtPumpenstechen() -> Bool {
+        guard pumpRank.isEmpty else { return false }
+        let max = players.map { $0.pumpen }.max() ?? 0
+        guard max > 0 else { return false }
+        return players.filter { $0.pumpen == max }.count > 1
+    }
+
+    func getPumpTiedPlayers() -> [String] {
+        let max = players.map { $0.pumpen }.max() ?? 0
+        guard max > 0 else { return [] }
+        return players.filter { $0.pumpen == max }.map { $0.name }.sorted()
+    }
+
+    // Called from PumpenTiebreakView with the stechen result in descending order (winner first)
+    func setPumpRank(ordered: [String]) {
+        pumpRank = Dictionary(uniqueKeysWithValues: ordered.enumerated().map { ($1, $0) })
     }
 
     // MARK: - Settings
