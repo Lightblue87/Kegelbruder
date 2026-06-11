@@ -26,13 +26,22 @@ struct AttendanceView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                stammSection
-                gästeSection
-                übersichtSection
+            HStack(alignment: .top, spacing: 0) {
+                // Left: scrollable attendance lists
+                Form {
+                    stammSection
+                    gästeSection
+                }
+
+                Divider()
+
+                // Right: always-visible overview panel (no scrolling needed)
+                übersichtPanel
+                    .frame(width: 280)
+                    .background(Color(UIColor.systemGroupedBackground))
             }
             .navigationTitle("Anwesenheit")
-            .navigationBarTitleDisplayMode(.large)
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Abbrechen") { dismiss() }
@@ -43,11 +52,14 @@ struct AttendanceView: View {
                         .disabled(anzahlAnwesend == 0)
                 }
             }
+            // Prevent accidental dismissal by tapping outside the sheet —
+            // all entered attendance data would be lost otherwise.
+            .interactiveDismissDisabled()
             .onAppear { initialisieren() }
         }
     }
 
-    // MARK: - Sections
+    // MARK: - Left: Stamm section
 
     private var stammSection: some View {
         Section("Stamm-Mitglieder") {
@@ -82,6 +94,8 @@ struct AttendanceView: View {
             }
         }
     }
+
+    // MARK: - Left: Gäste section
 
     private var gästeSection: some View {
         Section("Gäste") {
@@ -150,15 +164,116 @@ struct AttendanceView: View {
         }
     }
 
-    private var übersichtSection: some View {
-        Section("Übersicht") {
-            LabeledContent("Anwesend", value: "\(anzahlAnwesend)")
-            LabeledContent(
-                "Abwesend (Strafe \(String(format: "%.2f", vm.kasse.Strafe_Stamm)) €)",
-                value: "\(stammMitglieder.count - anwesend.filter { $0.value }.count)"
-            )
-            LabeledContent("Startgeld je Spieler", value: "\(String(format: "%.2f", vm.kasse.Startgeld)) €")
+    // MARK: - Right: Overview panel
+
+    private var übersichtPanel: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                // Header
+                Text("Übersicht")
+                    .font(.headline)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 20)
+                    .padding(.bottom, 12)
+
+                // Stats block
+                VStack(spacing: 0) {
+                    statRow(
+                        icon: "person.fill.checkmark",
+                        color: .kbSuccess,
+                        label: "Anwesend",
+                        value: "\(anzahlAnwesend)"
+                    )
+                    Divider().padding(.leading, 44)
+                    statRow(
+                        icon: "person.fill.xmark",
+                        color: .kbDanger,
+                        label: "Abwesend",
+                        value: "\(anzahlAbwesend)"
+                    )
+                    Divider().padding(.leading, 44)
+                    statRow(
+                        icon: "eurosign.circle",
+                        color: .kbPrimary,
+                        label: "Startgeld/Spieler",
+                        value: String(format: "%.2f €", vm.kasse.Startgeld)
+                    )
+                    Divider().padding(.leading, 44)
+                    statRow(
+                        icon: "exclamationmark.circle",
+                        color: .orange,
+                        label: "Strafe Abwesend",
+                        value: String(format: "%.2f €", vm.kasse.Strafe_Stamm)
+                    )
+                }
+                .background(Color(UIColor.secondarySystemGroupedBackground))
+                .cornerRadius(12)
+                .padding(.horizontal, 16)
+
+                if anzahlAnwesend > 0 {
+                    // Total start fees
+                    let total = Double(anzahlAnwesend) * vm.kasse.Startgeld
+                    HStack {
+                        Text("Startgelder gesamt")
+                            .font(.subheadline)
+                            .foregroundColor(.kbTextSecondary)
+                        Spacer()
+                        Text(String(format: "%.2f €", total))
+                            .font(.subheadline.bold())
+                            .foregroundColor(.kbPrimary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 16)
+
+                    // Attending player list
+                    Text("Spieler heute")
+                        .font(.subheadline.bold())
+                        .foregroundColor(.kbTextSecondary)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 20)
+                        .padding(.bottom, 8)
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(anwesendeNamen, id: \.self) { name in
+                            HStack(spacing: 10) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.kbSuccess)
+                                    .font(.system(size: 14))
+                                Text(name)
+                                    .font(.subheadline)
+                            }
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            if name != anwesendeNamen.last {
+                                Divider().padding(.leading, 38)
+                            }
+                        }
+                    }
+                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .cornerRadius(12)
+                    .padding(.horizontal, 16)
+                }
+
+                Spacer(minLength: 20)
+            }
         }
+    }
+
+    private func statRow(icon: String, color: Color, label: String, value: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .foregroundColor(color)
+                .font(.system(size: 18))
+                .frame(width: 28, alignment: .center)
+            Text(label)
+                .font(.subheadline)
+            Spacer()
+            Text(value)
+                .font(.subheadline.bold())
+                .foregroundColor(color)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
     }
 
     // MARK: - Helpers
@@ -167,6 +282,17 @@ struct AttendanceView: View {
         anwesend.filter { $0.value }.count
         + gastAnwesend.filter { $0.value }.count
         + neueGäste.filter { $0.selected }.count
+    }
+
+    private var anzahlAbwesend: Int {
+        stammMitglieder.count - anwesend.filter { $0.value }.count
+    }
+
+    private var anwesendeNamen: [String] {
+        let stamm = stammMitglieder.filter { anwesend[$0.0] ?? false }.map(\.0)
+        let gastDB = gastMitglieder.filter { gastAnwesend[$0.0] ?? false }.map(\.0)
+        let gastNeu = neueGäste.filter { $0.selected }.map(\.name)
+        return (stamm + gastDB + gastNeu).sorted()
     }
 
     private func initialisieren() {
@@ -219,7 +345,6 @@ struct AttendanceView: View {
         vm.pendingGäste     = alleGäste
 
         // 4. Dismiss first, then open PlayerSortView
-        //    (dismiss() sets activeSheet = nil; we reassign after the frame completes)
         dismiss()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             vm.activeSheet = .playerSort
