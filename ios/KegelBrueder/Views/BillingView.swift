@@ -7,6 +7,10 @@ struct BillingView: View {
     @State private var rows: [BillingRow] = []
     @State private var gezahlt: [String: String] = [:]
     @State private var showConfirm = false
+    @State private var showAbbruchWarnung = false
+    // true sobald abgerechnet oder bewusst abgebrochen wurde — dann werden die
+    // Eingaben beim Schließen nicht in die VM zurückgeschrieben
+    @State private var eingabenVerwerfen = false
 
     var body: some View {
         NavigationStack {
@@ -27,11 +31,19 @@ struct BillingView: View {
                             .foregroundColor(.kbDanger)
                             .monospacedDigit()
                     }
-                    let gesamtZahlungen = rows.map { $0.gezahlt }.reduce(0, +)
-                    LabeledContent("Einnahmen") {
-                        Text(String(format: "+%.2f €", gesamtZahlungen))
+                    let barZahlungen   = rows.filter { !$0.perKarte }.map { $0.gezahlt }.reduce(0, +)
+                    let kartenZahlungen = rows.filter { $0.perKarte }.map { $0.gezahlt }.reduce(0, +)
+                    LabeledContent("Einnahmen Bar (Kasse)") {
+                        Text(String(format: "+%.2f €", barZahlungen))
                             .foregroundColor(.kbSuccess)
                             .monospacedDigit()
+                    }
+                    if kartenZahlungen > 0 {
+                        LabeledContent("Einnahmen Karte (Konto)") {
+                            Text(String(format: "+%.2f €", kartenZahlungen))
+                                .foregroundColor(.kbSuccess)
+                                .monospacedDigit()
+                        }
                     }
                 }
             }
@@ -39,7 +51,7 @@ struct BillingView: View {
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Zurück") { dismiss() }
+                    Button("Abbrechen", role: .destructive) { showAbbruchWarnung = true }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Abrechnen") { showConfirm = true }
@@ -50,6 +62,7 @@ struct BillingView: View {
             }
             .alert("Spiel abrechnen?", isPresented: $showConfirm) {
                 Button("Abrechnen", role: .destructive) {
+                    eingabenVerwerfen = true
                     vm.abrechnungSpeichern(rows: rows)
                     dismiss()
                 }
@@ -57,8 +70,49 @@ struct BillingView: View {
             } message: {
                 Text("Das Spiel wird abgerechnet und ins Archiv übertragen. Dieser Schritt kann nicht rückgängig gemacht werden.")
             }
+            .alert("Abrechnung abbrechen?", isPresented: $showAbbruchWarnung) {
+                Button("Ja, abbrechen", role: .destructive) {
+                    eingabenVerwerfen = true
+                    dismiss()
+                    DispatchQueue.main.async {
+                        vm.billingRows = []
+                        vm.billingGezahlt = [:]
+                    }
+                }
+                Button("Weiter bearbeiten", role: .cancel) {}
+            } message: {
+                Text("Alle eingegebenen Beträge und Zahlungsarten werden verworfen.")
+            }
             .onAppear {
-                rows = vm.berechneBillingRows()
+                // Zeilen immer frisch berechnen (Punkte könnten sich geändert
+                // haben), aber gespeicherte Eingaben (Gezahlt/Zahlungsart) aus
+                // einem zuvor weggetippten Sheet wiederherstellen
+                var fresh = vm.berechneBillingRows()
+                if !vm.billingRows.isEmpty {
+                    let saved = Dictionary(
+                        vm.billingRows.map { ($0.player.name, $0) },
+                        uniquingKeysWith: { first, _ in first }
+                    )
+                    for i in fresh.indices {
+                        if let s = saved[fresh[i].player.name] {
+                            fresh[i].gezahlt  = s.gezahlt
+                            fresh[i].perKarte = s.perKarte
+                        }
+                    }
+                    gezahlt = vm.billingGezahlt
+                }
+                rows = fresh
+            }
+            .onDisappear {
+                // Eingaben überleben ein Schließen per Tap außerhalb des Sheets;
+                // gelöscht wird nur über "Abbrechen" oder nach dem Abrechnen
+                guard !eingabenVerwerfen else { return }
+                let r = rows
+                let g = gezahlt
+                DispatchQueue.main.async {
+                    vm.billingRows = r
+                    vm.billingGezahlt = g
+                }
             }
         }
     }
@@ -123,6 +177,18 @@ struct BillingRowView: View {
                     .padding(6)
                     .background(Color(UIColor.secondarySystemGroupedBackground))
                     .cornerRadius(8)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Zahlungsart")
+                        .font(.system(size: 12))
+                        .foregroundColor(.kbTextSecondary)
+                    Picker("Zahlungsart", selection: $row.perKarte) {
+                        Text("Bar").tag(false)
+                        Text("Karte").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 130)
                 }
 
                 Spacer()

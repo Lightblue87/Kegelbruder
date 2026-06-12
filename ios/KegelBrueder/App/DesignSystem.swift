@@ -414,7 +414,10 @@ struct KBNumPadGrid: View {
 
     private func padButton(_ label: String, role: PadRole = .digit,
                            action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        // Async-Hop: Die Bindings dieser Felder schreiben teils direkt in
+        // @Published-State (z. B. vm.players). Innerhalb des Popover-Updates
+        // würde das "Publishing changes from within view updates" auslösen.
+        Button(action: { DispatchQueue.main.async { action() } }) {
             Text(label)
                 .font(.system(size: role == .digit ? 24 : 20, weight: .regular))
                 .monospacedDigit()
