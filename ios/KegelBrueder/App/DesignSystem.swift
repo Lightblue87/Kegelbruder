@@ -444,12 +444,14 @@ final class LockedKeyboardTextField: UITextField {
             )
         }
         if ok && inputView != nil {
-            // A floating/undocked system keyboard lives in its own window and can
-            // stay visible next to the custom pad. Reload once after the focus
-            // transition so only the custom inputView remains.
+            // A floating/undocked system keyboard lives in its own window and is
+            // presented during the focus transition, before the custom pad takes
+            // over. Reload synchronously (no animation) so it never gets a frame,
+            // plus once more async as safety net for the floating-mode window.
+            UIView.performWithoutAnimation { self.reloadInputViews() }
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.isFirstResponder else { return }
-                self.reloadInputViews()
+                UIView.performWithoutAnimation { self.reloadInputViews() }
             }
         }
         return ok
