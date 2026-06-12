@@ -146,6 +146,14 @@ struct BillingRow: Identifiable {
     var zuZahlen: Double
     var gezahlt: Double = 0.0
     var spende: Double { max(0, gezahlt - zuZahlen) }
+
+    // Kostenaufschlüsselung: eigene Pumpen plus 9er/Kränze der anderen Spieler
+    var pumpenAnzahl: Int = 0
+    var pumpenBetrag: Double = 0
+    var fremdeNeuner: Int = 0
+    var fremdeNeunerBetrag: Double = 0
+    var fremdeKraenze: Int = 0
+    var fremdeKraenzeBetrag: Double = 0
 }
 
 // MARK: - Tiebreak state

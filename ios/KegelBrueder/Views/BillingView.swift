@@ -138,17 +138,17 @@ struct BillingRowView: View {
                 }
             }
 
-            // Penalty pills
-            if row.player.pumpen > 0 || row.player.neuner > 0 || row.player.kranz > 0 {
+            // Kostenaufschlüsselung: woraus sich "Zu zahlen" zusammensetzt
+            if row.pumpenAnzahl > 0 || row.fremdeNeuner > 0 || row.fremdeKraenze > 0 {
                 HStack(spacing: 8) {
-                    if row.player.pumpen > 0 {
-                        KBPill("\(row.player.pumpen) Pump", tone: .danger)
+                    if row.pumpenAnzahl > 0 {
+                        KBPill(String(format: "%d Pump · %.2f €", row.pumpenAnzahl, row.pumpenBetrag), tone: .danger)
                     }
-                    if row.player.neuner > 0 {
-                        KBPill("\(row.player.neuner)× 9er", tone: .primary)
+                    if row.fremdeNeuner > 0 {
+                        KBPill(String(format: "%d× 9er anderer · %.2f €", row.fremdeNeuner, row.fremdeNeunerBetrag), tone: .primary)
                     }
-                    if row.player.kranz > 0 {
-                        KBPill("\(row.player.kranz) Kranz", tone: .success)
+                    if row.fremdeKraenze > 0 {
+                        KBPill(String(format: "%d× Kranz anderer · %.2f €", row.fremdeKraenze, row.fremdeKraenzeBetrag), tone: .success)
                     }
                 }
             }

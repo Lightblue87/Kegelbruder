@@ -283,14 +283,26 @@ class AppViewModel: ObservableObject {
         var rows: [BillingRow] = []
         for (platz, player) in ranking.enumerated() {
             let myPumpen = player.pumpen + (tiebreakExtras[player.name]?.pumpen ?? 0)
-            var zuZahlen = Double(myPumpen) * kasse.Pumpe
+            var fremdeNeuner = 0
+            var fremdeKraenze = 0
             for other in players where other.name != player.name {
-                let otherNeuner = other.neuner + (tiebreakExtras[other.name]?.neuner ?? 0)
-                let otherKranz  = other.kranz  + (tiebreakExtras[other.name]?.kranz  ?? 0)
-                zuZahlen += Double(otherNeuner) * kasse.Neuner
-                zuZahlen += Double(otherKranz)  * kasse.Kranz
+                fremdeNeuner  += other.neuner + (tiebreakExtras[other.name]?.neuner ?? 0)
+                fremdeKraenze += other.kranz  + (tiebreakExtras[other.name]?.kranz  ?? 0)
             }
-            rows.append(BillingRow(platz: platz + 1, player: player, zuZahlen: round2(zuZahlen)))
+            let pumpenBetrag = Double(myPumpen) * kasse.Pumpe
+            let neunerBetrag = Double(fremdeNeuner) * kasse.Neuner
+            let kranzBetrag  = Double(fremdeKraenze) * kasse.Kranz
+            rows.append(BillingRow(
+                platz: platz + 1,
+                player: player,
+                zuZahlen: round2(pumpenBetrag + neunerBetrag + kranzBetrag),
+                pumpenAnzahl: myPumpen,
+                pumpenBetrag: round2(pumpenBetrag),
+                fremdeNeuner: fremdeNeuner,
+                fremdeNeunerBetrag: round2(neunerBetrag),
+                fremdeKraenze: fremdeKraenze,
+                fremdeKraenzeBetrag: round2(kranzBetrag)
+            ))
         }
         return rows
     }
