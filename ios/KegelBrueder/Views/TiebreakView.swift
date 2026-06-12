@@ -111,10 +111,14 @@ struct TiebreakView: View {
 
     private func initialisieren() {
         let namen = vm.getTiedPlayers()
+        inputs = namen.map { PlayerInput(name: $0) }
         // Stale Daten eines zuvor abgebrochenen Stechens verwerfen, sonst
         // verfälschen sie die kumulierte Auswertung dieses Stechens.
-        for name in namen { vm.tiebreakExtras[name] = nil }
-        inputs = namen.map { PlayerInput(name: $0) }
+        // Async, weil onAppear innerhalb des View-Updates läuft und Published-
+        // Werte dort nicht synchron geschrieben werden dürfen.
+        DispatchQueue.main.async {
+            for name in namen { vm.tiebreakExtras[name] = nil }
+        }
     }
 
     private func auswerten() {
