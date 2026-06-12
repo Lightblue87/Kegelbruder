@@ -146,6 +146,8 @@ struct BillingRow: Identifiable {
     var zuZahlen: Double
     var gezahlt: Double = 0.0
     var spende: Double { max(0, gezahlt - zuZahlen) }
+    // true = Kartenzahlung (geht aufs Konto), false = bar (geht in die Kasse)
+    var perKarte: Bool = false
 
     // Kostenaufschlüsselung: eigene Pumpen plus 9er/Kränze der anderen Spieler
     var pumpenAnzahl: Int = 0

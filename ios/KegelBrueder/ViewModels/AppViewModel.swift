@@ -386,22 +386,35 @@ class AppViewModel: ObservableObject {
             let zahlungAufSchuld = min(gezahlt, playerData.offene_zahlung)
             if zahlungAufSchuld > 0 {
                 playerData.offene_zahlung = round2(max(0, playerData.offene_zahlung - zahlungAufSchuld))
-                let text = addEinzahlung(
-                    betrag: zahlungAufSchuld,
-                    beschreibung: "\(datum) - Zahlung von \(row.player.name)",
-                    datum: datum
-                )
+                // Kartenzahlung geht aufs Konto, Barzahlung in die Kasse
+                let text = row.perKarte
+                    ? addEinzahlungKonto(
+                        betrag: zahlungAufSchuld,
+                        beschreibung: "Zahlung von \(row.player.name) (Karte)",
+                        datum: datum
+                      )
+                    : addEinzahlung(
+                        betrag: zahlungAufSchuld,
+                        beschreibung: "\(datum) - Zahlung von \(row.player.name)",
+                        datum: datum
+                      )
                 sessionTx.append((kind: "einzahlung", betrag: zahlungAufSchuld, text: text))
                 gesamtZahlungen += zahlungAufSchuld
             }
 
             let spende = round2(max(0, gezahlt - zahlungAufSchuld))
             if spende > 0 {
-                let text = addEinzahlung(
-                    betrag: spende,
-                    beschreibung: "\(datum) - Spende von \(row.player.name)",
-                    datum: datum
-                )
+                let text = row.perKarte
+                    ? addEinzahlungKonto(
+                        betrag: spende,
+                        beschreibung: "Spende von \(row.player.name) (Karte)",
+                        datum: datum
+                      )
+                    : addEinzahlung(
+                        betrag: spende,
+                        beschreibung: "\(datum) - Spende von \(row.player.name)",
+                        datum: datum
+                      )
                 sessionTx.append((kind: "einzahlung", betrag: spende, text: text))
                 gesamtZahlungen += spende
             }
@@ -756,9 +769,9 @@ class AppViewModel: ObservableObject {
     }
 
     @discardableResult
-    private func addEinzahlungKonto(betrag: Double, beschreibung: String) -> String {
+    private func addEinzahlungKonto(betrag: Double, beschreibung: String, datum: String? = nil) -> String {
         let wert = round2(betrag)
-        let d = formatDatum(Date())
+        let d = datum ?? formatDatum(Date())
         kasse.Kontostand += wert
         let text = "[Konto] \(d) | +\(String(format: "%.2f", wert))€: \(beschreibung)"
         kasse.Transaktionen.append(text)

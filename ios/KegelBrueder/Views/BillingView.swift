@@ -27,11 +27,19 @@ struct BillingView: View {
                             .foregroundColor(.kbDanger)
                             .monospacedDigit()
                     }
-                    let gesamtZahlungen = rows.map { $0.gezahlt }.reduce(0, +)
-                    LabeledContent("Einnahmen") {
-                        Text(String(format: "+%.2f €", gesamtZahlungen))
+                    let barZahlungen   = rows.filter { !$0.perKarte }.map { $0.gezahlt }.reduce(0, +)
+                    let kartenZahlungen = rows.filter { $0.perKarte }.map { $0.gezahlt }.reduce(0, +)
+                    LabeledContent("Einnahmen Bar (Kasse)") {
+                        Text(String(format: "+%.2f €", barZahlungen))
                             .foregroundColor(.kbSuccess)
                             .monospacedDigit()
+                    }
+                    if kartenZahlungen > 0 {
+                        LabeledContent("Einnahmen Karte (Konto)") {
+                            Text(String(format: "+%.2f €", kartenZahlungen))
+                                .foregroundColor(.kbSuccess)
+                                .monospacedDigit()
+                        }
                     }
                 }
             }
@@ -123,6 +131,18 @@ struct BillingRowView: View {
                     .padding(6)
                     .background(Color(UIColor.secondarySystemGroupedBackground))
                     .cornerRadius(8)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Zahlungsart")
+                        .font(.system(size: 12))
+                        .foregroundColor(.kbTextSecondary)
+                    Picker("Zahlungsart", selection: $row.perKarte) {
+                        Text("Bar").tag(false)
+                        Text("Karte").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 130)
                 }
 
                 Spacer()
