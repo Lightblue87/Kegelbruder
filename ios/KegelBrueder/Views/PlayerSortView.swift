@@ -16,19 +16,13 @@ struct PlayerSortView: View {
 
                 List {
                     ForEach(orderedNames, id: \.self) { name in
-                        HStack {
+                        HStack(spacing: 10) {
                             Image(systemName: "line.3.horizontal")
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.kbTextTertiary)
                             Text(name)
                                 .font(.headline)
-                            if vm.mitglieder[name]?.typ == "Gast" {
-                                Text("Gast")
-                                    .font(.caption)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(Color.orange.opacity(0.2))
-                                    .foregroundColor(.orange)
-                                    .cornerRadius(4)
+                            if vm.pendingGäste.contains(where: { $0.name == name }) {
+                                KBPill("Gast", tone: .guest)
                             }
                         }
                         .padding(.vertical, 4)
@@ -44,8 +38,11 @@ struct PlayerSortView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Zurück") {
-                        vm.activeSheet = .attendance
+                        vm.rollbackStartgebuehren()
                         dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            vm.activeSheet = .attendance
+                        }
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
@@ -54,6 +51,7 @@ struct PlayerSortView: View {
                         dismiss()
                     }
                     .font(.headline)
+                    .foregroundColor(.kbPrimary)
                 }
             }
             .onAppear { initialisieren() }

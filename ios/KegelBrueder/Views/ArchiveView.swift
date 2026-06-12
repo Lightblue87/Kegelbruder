@@ -7,25 +7,49 @@ struct ArchiveView: View {
 
     var body: some View {
         NavigationSplitView {
-            List(entries, selection: $selected) { entry in
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(entry.datum)
-                        .font(.headline)
-                    HStack {
-                        Label("\(entry.players.count) Spieler", systemImage: "person.2")
-                        Spacer()
-                        Label("\(entry.transaktionen.count) Buchungen", systemImage: "list.bullet")
+            Group {
+                if entries.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 44))
+                            .foregroundColor(.secondary)
+                        Text("Noch keine Spiele archiviert")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        Text("Gespiele werden nach der Abrechnung hier gespeichert.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
                     }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    List(entries, selection: $selected) { entry in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(entry.datum)
+                                .font(.headline)
+                            HStack {
+                                Label("\(entry.players.count) Spieler", systemImage: "person.2")
+                                Spacer()
+                                Label("\(entry.transaktionen.count) Buchungen", systemImage: "list.bullet")
+                            }
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        }
+                        .padding(.vertical, 4)
+                        .tag(entry)
+                    }
                 }
-                .padding(.vertical, 4)
-                .tag(entry)
             }
             .navigationTitle("Archiv")
-            .onAppear {
-                entries = vm.store.ladeHistorie().reversed()
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { laden() } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
             }
+            .onAppear { laden() }
         } detail: {
             if let entry = selected {
                 ArchiveDetailView(entry: entry)
@@ -35,6 +59,10 @@ struct ArchiveView: View {
                     .font(.title2)
             }
         }
+    }
+
+    private func laden() {
+        entries = Array(vm.store.ladeHistorie().reversed())
     }
 }
 
@@ -79,27 +107,33 @@ struct ArchiveDetailView: View {
                         HStack {
                             Text("\(platz).")
                                 .frame(width: 36, alignment: .leading)
-                                .font(.subheadline.bold())
-                                .foregroundColor(platz == 1 ? .yellow : .primary)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(platz == 1 ? .kbBrass500 : .kbTextSecondary)
                             Text(name)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .font(.subheadline)
+                                .font(.system(size: 15, weight: platz == 1 ? .semibold : .regular))
+                                .foregroundColor(platz == 1 ? .kbBrass500 : .primary)
                             ForEach(0..<4, id: \.self) { i in
                                 Text("\(data.punkte.indices.contains(i) ? data.punkte[i] : 0)")
                                     .frame(width: 40, alignment: .center)
-                                    .font(.subheadline)
-                                    .foregroundColor(.secondary)
+                                    .font(.system(size: 14))
+                                    .foregroundColor(.kbTextSecondary)
+                                    .monospacedDigit()
                             }
                             Text("\(data.punkte.reduce(0,+))")
                                 .frame(width: 44, alignment: .center)
-                                .font(.subheadline.bold())
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundColor(platz == 1 ? .kbBrass500 : .primary)
+                                .monospacedDigit()
                             Text("\(data.pumpen ?? 0)")
                                 .frame(width: 44, alignment: .center)
-                                .font(.subheadline)
-                                .foregroundColor(.red)
+                                .font(.system(size: 14))
+                                .foregroundColor(.kbPumpe)
+                                .monospacedDigit()
                         }
                         .padding(.horizontal)
-                        .padding(.vertical, 6)
+                        .padding(.vertical, 8)
+                        .background(platz == 1 ? Color.kbBrass400.opacity(0.07) : Color.clear)
                         Divider()
                     }
                 }
@@ -115,15 +149,16 @@ struct ArchiveDetailView: View {
 
                     VStack(spacing: 0) {
                         ForEach(Array(entry.transaktionen.enumerated()), id: \.offset) { _, tx in
-                            HStack {
+                            HStack(spacing: 10) {
+                                let isNeg = tx.contains("| -")
                                 Circle()
-                                    .fill(tx.contains("| +") || tx.contains("+") ? Color.green.opacity(0.7) : Color.red.opacity(0.7))
+                                    .fill(isNeg ? Color.kbDanger : Color.kbSuccess)
                                     .frame(width: 8, height: 8)
                                 Text(tx)
-                                    .font(.caption)
+                                    .font(.system(size: 13))
                             }
                             .padding(.horizontal)
-                            .padding(.vertical, 4)
+                            .padding(.vertical, 5)
                             Divider()
                         }
                     }

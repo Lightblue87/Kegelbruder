@@ -25,7 +25,9 @@ final class SQLiteStore {
     // MARK: - Schema
 
     private func createSchema() throws {
-        try exec("""
+        // sqlite3_prepare_v2 only compiles the first statement in a multi-statement string.
+        // Use sqlite3_exec which processes all statements in one call.
+        let sql = """
         CREATE TABLE IF NOT EXISTS mitglieder (
             name TEXT PRIMARY KEY,
             typ TEXT NOT NULL DEFAULT 'Stamm',
@@ -86,14 +88,20 @@ final class SQLiteStore {
             seit TEXT NOT NULL,
             plattform TEXT NOT NULL
         );
-        """)
+        """
+        var errmsg: UnsafeMutablePointer<CChar>?
+        guard sqlite3_exec(db, sql, nil, nil, &errmsg) == SQLITE_OK else {
+            let msg = errmsg.map { String(cString: $0) } ?? "unknown"
+            sqlite3_free(errmsg)
+            throw SQLiteError.stepFailed(msg)
+        }
     }
 
     private func insertDefaultKasse() throws {
         let defaults: [(String, Double)] = [
             ("Startgeld", 5.0), ("Pumpe", 0.5), ("Neuner", 1.0), ("Kranz", 2.0),
             ("Strafe Stamm", 7.5), ("Bahngebühr", 30.0),
-            ("Kassenstand", 0.0), ("Letzte_Startgebuehren", 0.0)
+            ("Kassenstand", 0.0), ("Kontostand", 0.0), ("Letzte_Startgebuehren", 0.0)
         ]
         for (key, val) in defaults {
             try exec("INSERT OR IGNORE INTO kasse_einstellungen (schluessel, wert) VALUES (?, ?)",
@@ -131,10 +139,10 @@ final class SQLiteStore {
 
     func reduziereOffeneZahlung(name: String, betrag: Double) throws {
         try transaction {
-            let rows = try queryRows("SELECT offene_zahlung FROM mitglieder WHERE name = ?",
-                                     params: [.text(name)])
-            guard let row = rows.first else { return }
-            let neu = max(0.0, row.real(0) - betrag)
+            var current = 0.0
+            try query("SELECT offene_zahlung FROM mitglieder WHERE name = ?",
+                      params: [.text(name)]) { row in current = row.real(0) }
+            let neu = max(0.0, current - betrag)
             try exec("UPDATE mitglieder SET offene_zahlung = ? WHERE name = ?",
                      params: [.real(neu), .text(name)])
         }
@@ -178,7 +186,11 @@ final class SQLiteStore {
 
     func ladeAktuellesSpiel() -> AktuellesSpielFile {
         var players: [String: PlayerData] = [:]
-        try? query("SELECT * FROM aktuelles_spiel_spieler ORDER BY position") { row in
+        try? query("""
+            SELECT name, typ, punkte_r1, punkte_r2, punkte_r3, punkte_r4,
+                   pumpen, neuner, kranz, position, offene_zahlung
+            FROM aktuelles_spiel_spieler ORDER BY position
+            """) { row in
             let name = row.text(0)
             players[name] = PlayerData(
                 typ: row.text(1),
@@ -246,12 +258,11 @@ final class SQLiteStore {
     // MARK: - Historie
 
     func ladeHistorie(limit: Int = 100) -> [HistorieEntry] {
-        guard let spiele = try? queryRows(
+        var entries: [HistorieEntry] = []
+        try? query(
             "SELECT id, datum, spieler_reihenfolge FROM historie ORDER BY id DESC LIMIT ?",
             params: [.int(limit)]
-        ) else { return [] }
-
-        return spiele.compactMap { spiel in
+        ) { spiel in
             let spielId = spiel.int(0)
             let datum   = spiel.text(1)
             let reihenfolge = (try? JSONDecoder().decode(
@@ -261,14 +272,18 @@ final class SQLiteStore {
 
             var players: [String: PlayerData] = [:]
             try? query(
-                "SELECT * FROM historie_spieler WHERE spiel_id = ?",
+                """
+                SELECT name, typ, punkte_r1, punkte_r2, punkte_r3, punkte_r4,
+                       pumpen, neuner, kranz, offene_zahlung
+                FROM historie_spieler WHERE spiel_id = ?
+                """,
                 params: [.int(spielId)]
             ) { row in
-                players[row.text(2)] = PlayerData(
-                    typ: row.text(3) ?? "Stamm",
-                    punkte: [row.int(4), row.int(5), row.int(6), row.int(7)],
-                    offene_zahlung: row.real(11),
-                    pumpen: row.int(8), neuner: row.int(9), kranz: row.int(10),
+                players[row.text(0)] = PlayerData(
+                    typ: row.text(1),
+                    punkte: [row.int(2), row.int(3), row.int(4), row.int(5)],
+                    offene_zahlung: row.real(9),
+                    pumpen: row.int(6), neuner: row.int(7), kranz: row.int(8),
                     position: nil
                 )
             }
@@ -279,11 +294,12 @@ final class SQLiteStore {
                 params: [.int(spielId)]
             ) { row in transaktionen.append(row.text(0)) }
 
-            return HistorieEntry(
-                datum: datum, players: players,
+            entries.append(HistorieEntry(
+                spielId: spielId, datum: datum, players: players,
                 transaktionen: transaktionen, spieler_reihenfolge: reihenfolge
-            )
+            ))
         }
+        return entries
     }
 
     func archivierSpiel(datum: String, players: [String: PlayerData],
@@ -336,8 +352,6 @@ final class SQLiteStore {
             "INSERT OR REPLACE INTO app_lock (id, geraet, seit, plattform) VALUES (1, ?, ?, ?)",
             params: [.text(geraet), .text(seit), .text(plattform)]
         )
-        try exec("") // flush
-        sqlite3_exec(db, "COMMIT", nil, nil, nil)
     }
 
     func loescheLock() throws {
@@ -378,12 +392,6 @@ final class SQLiteStore {
         }
     }
 
-    func queryRows(_ sql: String, params: [Param] = []) throws -> [Row] {
-        var rows: [Row] = []
-        try query(sql, params: params) { rows.append($0) }
-        return rows
-    }
-
     func transaction(_ block: () throws -> Void) throws {
         try exec("BEGIN")
         do {
@@ -413,9 +421,8 @@ final class SQLiteStore {
 
     struct Row {
         let stmt: OpaquePointer
-        func text(_ col: Int32) -> String { String(cString: sqlite3_column_text(stmt, col)) }
-        func text(_ col: Int32) -> String? {
-            guard let p = sqlite3_column_text(stmt, col) else { return nil }
+        func text(_ col: Int32) -> String {
+            guard let p = sqlite3_column_text(stmt, col) else { return "" }
             return String(cString: p)
         }
         func real(_ col: Int32) -> Double { sqlite3_column_double(stmt, col) }
