@@ -18,6 +18,7 @@ class AppViewModel: ObservableObject {
 
     // MARK: - Billing state
     @Published var billingRows: [BillingRow] = []
+    @Published var billingGezahlt: [String: String] = [:]  // Eingaben überleben Sheet-Dismiss
     @Published var tiebreakExtras: [String: TiebreakExtra] = [:]
     @Published var pumpRank: [String: Int] = [:]  // rank 0 = winner of Pumpenstechen
 
@@ -120,6 +121,8 @@ class AppViewModel: ObservableObject {
         pendingGäste = []
         tiebreakExtras = [:]
         pumpRank = [:]
+        billingRows = []
+        billingGezahlt = [:]
         runde = 1
         abgerechnet = false
         activeSheet = .attendance
@@ -468,6 +471,8 @@ class AppViewModel: ObservableObject {
         gameRunning = false
         tiebreakExtras = [:]
         pumpRank = [:]
+        billingRows = []
+        billingGezahlt = [:]
         sessionTx = []
         preSessionSchulden = [:]
         pendingAttendees = []
@@ -510,8 +515,12 @@ class AppViewModel: ObservableObject {
 
         sessionTx = []
         preSessionSchulden = [:]
+        billingRows = []
+        billingGezahlt = [:]
         tiebreakExtras = [:]
         pumpRank = [:]
+        billingRows = []
+        billingGezahlt = [:]
         pendingAttendees = []
         pendingGäste = []
         players = []
