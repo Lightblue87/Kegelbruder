@@ -213,10 +213,16 @@ private final class LockedNumberTextField: UITextField {
     }
 
     func syncInputView() {
-        if isDark && UIDevice.current.userInterfaceIdiom == .pad {
-            let pad = DarkNumberPad(allowsDecimal: false)
-            pad.onInsert = { [weak self] s in self?.insertText(s) }
-            pad.onDelete = { [weak self] in self?.deleteBackward() }
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let pad = DarkNumberPad(allowsDecimal: false, isDark: isDark)
+            pad.onInsert = { [weak self] s in
+                self?.insertText(s)
+                self?.sendActions(for: .editingChanged)
+            }
+            pad.onDelete = { [weak self] in
+                self?.deleteBackward()
+                self?.sendActions(for: .editingChanged)
+            }
             inputView = pad
         } else {
             inputView = nil
@@ -272,7 +278,9 @@ private struct NumberInputField: UIViewRepresentable {
         f.spellCheckingType  = .no
         f.isDark             = colorScheme == .dark
         f.keyboardAppearance = colorScheme == .dark ? .dark : .default
+        f.syncInputView()
         f.delegate           = context.coordinator
+        f.addTarget(context.coordinator, action: #selector(Coordinator.editingChanged(_:)), for: .editingChanged)
         return f
     }
 
@@ -303,6 +311,11 @@ private struct NumberInputField: UIViewRepresentable {
         func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
                        replacementString s: String) -> Bool {
             s.isEmpty || s.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
+        }
+
+        // Live sync — the binding must never lag behind the visible text.
+        @objc func editingChanged(_ f: UITextField) {
+            binding.wrappedValue = f.text.flatMap(Int.init) ?? 0
         }
 
         func textFieldDidEndEditing(_ f: UITextField) {

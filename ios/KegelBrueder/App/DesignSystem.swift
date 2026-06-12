@@ -329,10 +329,13 @@ final class DarkNumberPad: UIInputView {
     var onInsert: (String) -> Void = { _ in }
     var onDelete: () -> Void = {}
 
-    init(allowsDecimal: Bool = false) {
+    private let isDark: Bool
+
+    init(allowsDecimal: Bool = false, isDark: Bool = true) {
+        self.isDark = isDark
         super.init(frame: .zero, inputViewStyle: .keyboard)
         translatesAutoresizingMaskIntoConstraints = false
-        backgroundColor = UIColor(white: 0.14, alpha: 1)
+        backgroundColor = isDark ? UIColor(white: 0.14, alpha: 1) : UIColor(white: 0.86, alpha: 1)
         let dec = allowsDecimal ? (Locale.current.decimalSeparator ?? ",") : nil
         let layout: [[String?]] = [
             ["1","2","3"], ["4","5","6"], ["7","8","9"], [dec,"0","⌫"]
@@ -354,19 +357,19 @@ final class DarkNumberPad: UIInputView {
                 if let key = key {
                     let btn = UIButton(type: .system)
                     btn.setTitle(key, for: .normal)
-                    btn.setTitleColor(UIColor(white: 0.95, alpha: 1), for: .normal)
+                    btn.setTitleColor(isDark ? UIColor(white: 0.95, alpha: 1) : UIColor(white: 0.1, alpha: 1), for: .normal)
                     let isAction = key == "⌫" || key == dec
                     btn.titleLabel?.font = isAction
                         ? .systemFont(ofSize: 22)
                         : .systemFont(ofSize: 28, weight: .light)
                     btn.backgroundColor = isAction
-                        ? UIColor(white: 0.24, alpha: 1)
-                        : UIColor(white: 0.32, alpha: 1)
+                        ? (isDark ? UIColor(white: 0.24, alpha: 1) : UIColor(white: 0.72, alpha: 1))
+                        : (isDark ? UIColor(white: 0.32, alpha: 1) : UIColor.white)
                     btn.layer.cornerRadius = 10
                     btn.addTarget(self, action: #selector(tap(_:)), for: .touchUpInside)
                     hStack.addArrangedSubview(btn)
                 } else {
-                    let ph = UIView(); ph.backgroundColor = UIColor(white: 0.14, alpha: 1)
+                    let ph = UIView(); ph.backgroundColor = .clear
                     hStack.addArrangedSubview(ph)
                 }
             }
@@ -408,13 +411,20 @@ final class LockedKeyboardTextField: UITextField {
         set { super.keyboardType = lockedType }
     }
 
-    // On iPad, replace the system keyboard with our own dark pad when in dark mode.
-    // On iPhone (or light mode), fall back to the system keyboard with keyboardAppearance.
+    // On iPad, always replace the system keyboard with our own pad — iPad has no
+    // dedicated numberPad layout and falls back to the full keyboard otherwise.
+    // On iPhone, fall back to the system keyboard with keyboardAppearance.
     func syncInputView() {
-        if isDark && UIDevice.current.userInterfaceIdiom == .pad {
-            let pad = DarkNumberPad(allowsDecimal: lockedType == .decimalPad)
-            pad.onInsert = { [weak self] s in self?.insertText(s) }
-            pad.onDelete = { [weak self] in self?.deleteBackward() }
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            let pad = DarkNumberPad(allowsDecimal: lockedType == .decimalPad, isDark: isDark)
+            pad.onInsert = { [weak self] s in
+                self?.insertText(s)
+                self?.sendActions(for: .editingChanged)
+            }
+            pad.onDelete = { [weak self] in
+                self?.deleteBackward()
+                self?.sendActions(for: .editingChanged)
+            }
             inputView = pad
         } else {
             inputView = nil
@@ -487,6 +497,11 @@ final class KBInputCoordinator: NSObject, UITextFieldDelegate {
         s.isEmpty || s.unicodeScalars.allSatisfy { allowed.contains($0) }
     }
 
+    // Live sync on every keystroke — the binding must never lag behind the
+    // visible text, otherwise "Runde auswerten" reads a stale value while a
+    // field is still first responder.
+    @objc func editingChanged(_ f: UITextField) { binding.wrappedValue = f.text ?? "" }
+
     func textFieldDidEndEditing(_ f: UITextField) { binding.wrappedValue = f.text ?? "" }
     func textFieldShouldReturn(_ f: UITextField) -> Bool { f.resignFirstResponder(); return true }
 }
@@ -507,6 +522,7 @@ struct NumberStringInputField: UIViewRepresentable {
         f.isDark = colorScheme == .dark
         f.syncInputView()
         f.delegate = context.coordinator
+        f.addTarget(context.coordinator, action: #selector(KBInputCoordinator.editingChanged(_:)), for: .editingChanged)
         return f
     }
 
@@ -535,6 +551,7 @@ struct DecimalInputField: UIViewRepresentable {
         f.isDark = colorScheme == .dark
         f.syncInputView()
         f.delegate = context.coordinator
+        f.addTarget(context.coordinator, action: #selector(KBInputCoordinator.editingChanged(_:)), for: .editingChanged)
         return f
     }
 

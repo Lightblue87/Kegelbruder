@@ -111,6 +111,9 @@ struct TiebreakView: View {
 
     private func initialisieren() {
         let namen = vm.getTiedPlayers()
+        // Stale Daten eines zuvor abgebrochenen Stechens verwerfen, sonst
+        // verfälschen sie die kumulierte Auswertung dieses Stechens.
+        for name in namen { vm.tiebreakExtras[name] = nil }
         inputs = namen.map { PlayerInput(name: $0) }
     }
 

@@ -11,6 +11,7 @@ struct PumpenTiebreakView: View {
     @State private var runde: Int = 1
     @State private var inputs: [PlayerInput] = []
     @State private var aufgelöst: Bool = false
+    @State private var sieger: String? = nil
     // Local accumulator — intentionally NOT written to vm.tiebreakExtras so that
     // Pumpenstechen data doesn't contaminate the Punktestechen check in getTiedPlayers().
     @State private var pumpExtras: [String: Int] = [:]
@@ -80,11 +81,20 @@ struct PumpenTiebreakView: View {
     private var weiterView: some View {
         VStack(spacing: 24) {
             Spacer()
-            Image(systemName: "checkmark.circle.fill")
+            Image(systemName: "trophy.fill")
                 .font(.system(size: 60))
-                .foregroundColor(.kbSuccess)
-            Text("Pumpenstechen aufgelöst")
-                .font(.system(size: 28, weight: .bold))
+                .foregroundColor(.kbBrass400)
+            if let sieger {
+                Text(sieger)
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(.kbBrass500)
+                Text("hat das Pumpenstechen gewonnen!")
+                    .font(.title3)
+                    .foregroundColor(.kbTextSecondary)
+            } else {
+                Text("Pumpenstechen aufgelöst")
+                    .font(.system(size: 28, weight: .bold))
+            }
             Spacer()
             Button {
                 dismiss()
@@ -118,6 +128,7 @@ struct PumpenTiebreakView: View {
         if maxPts != minPts {
             let ordered = pumpExtras.sorted { $0.value > $1.value }.map { $0.key }
             vm.setPumpRank(ordered: ordered)
+            sieger = ordered.first
             aufgelöst = true
         } else {
             runde += 1
