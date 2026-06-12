@@ -318,261 +318,140 @@ struct KBRowDivider: View {
     }
 }
 
-// MARK: - Dark number pad (custom inputView for iPad dark mode)
+
+// MARK: - SwiftUI number pad (popover)
 //
-// The iPad compact floating keyboard popup (shown when a hardware keyboard is
-// connected) is a system-level overlay in its own window — neither
-// keyboardAppearance nor overrideUserInterfaceStyle on the UITextField can
-// affect it. The only reliable fix is to replace the system keyboard entirely
-// with a custom inputView on iPad in dark mode.
-final class DarkNumberPad: UIInputView {
-    var onInsert: (String) -> Void = { _ in }
-    var onDelete: () -> Void = {}
+// The iPad system keyboard is unreliable for number entry: there is no real
+// numberPad layout, the floating/undocked keyboard lives in its own window
+// that ignores custom inputViews, and keyboardAppearance can't be themed
+// reliably. These fields therefore never touch the UIKit text-input system —
+// tapping them opens a self-drawn pad in a popover and edits the binding
+// directly on every key press.
 
-    private let isDark: Bool
+struct KBNumPadField: View {
+    @Binding var text: String
+    var placeholder: String = "0"
+    var allowsDecimal: Bool = false
+    var alignment: Alignment = .center
+    var font: Font = .system(size: 20, weight: .bold).monospacedDigit()
 
-    init(allowsDecimal: Bool = false, isDark: Bool = true) {
-        self.isDark = isDark
-        super.init(frame: .zero, inputViewStyle: .keyboard)
-        translatesAutoresizingMaskIntoConstraints = false
-        backgroundColor = isDark ? UIColor(white: 0.14, alpha: 1) : UIColor(white: 0.86, alpha: 1)
-        let dec = allowsDecimal ? (Locale.current.decimalSeparator ?? ",") : nil
-        let layout: [[String?]] = [
-            ["1","2","3"], ["4","5","6"], ["7","8","9"], [dec,"0","⌫"]
-        ]
-        let vStack = UIStackView()
-        vStack.axis = .vertical; vStack.distribution = .fillEqually; vStack.spacing = 6
-        vStack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(vStack)
-        NSLayoutConstraint.activate([
-            vStack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            vStack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-            vStack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
-            vStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8)
-        ])
-        for row in layout {
-            let hStack = UIStackView()
-            hStack.axis = .horizontal; hStack.distribution = .fillEqually; hStack.spacing = 6
-            for key in row {
-                if let key = key {
-                    let btn = UIButton(type: .system)
-                    btn.setTitle(key, for: .normal)
-                    btn.setTitleColor(isDark ? UIColor(white: 0.95, alpha: 1) : UIColor(white: 0.1, alpha: 1), for: .normal)
-                    let isAction = key == "⌫" || key == dec
-                    btn.titleLabel?.font = isAction
-                        ? .systemFont(ofSize: 22)
-                        : .systemFont(ofSize: 28, weight: .light)
-                    btn.backgroundColor = isAction
-                        ? (isDark ? UIColor(white: 0.24, alpha: 1) : UIColor(white: 0.72, alpha: 1))
-                        : (isDark ? UIColor(white: 0.32, alpha: 1) : UIColor.white)
-                    btn.layer.cornerRadius = 10
-                    btn.addTarget(self, action: #selector(tap(_:)), for: .touchUpInside)
-                    hStack.addArrangedSubview(btn)
-                } else {
-                    let ph = UIView(); ph.backgroundColor = .clear
-                    hStack.addArrangedSubview(ph)
+    @State private var showPad = false
+
+    var body: some View {
+        Button {
+            showPad = true
+        } label: {
+            Text(text.isEmpty ? placeholder : text)
+                .font(font)
+                .foregroundColor(text.isEmpty ? Color(UIColor.placeholderText) : .primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: alignment)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $showPad, arrowEdge: .top) {
+            KBNumPadGrid(text: $text, allowsDecimal: allowsDecimal) {
+                showPad = false
+            }
+            .presentationCompactAdaptation(.popover)
+        }
+    }
+}
+
+struct KBNumPadGrid: View {
+    @Binding var text: String
+    var allowsDecimal: Bool
+    var onDone: () -> Void
+
+    private var separator: String { Locale.current.decimalSeparator ?? "," }
+
+    var body: some View {
+        VStack(spacing: 8) {
+            grid
+            Button(action: onDone) {
+                Text("Fertig")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(Color.accentColor.opacity(0.2))
+                    .cornerRadius(10)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .frame(width: 248)
+    }
+
+    private var grid: some View {
+        VStack(spacing: 8) {
+            ForEach([["1","2","3"], ["4","5","6"], ["7","8","9"]], id: \.self) { row in
+                HStack(spacing: 8) {
+                    ForEach(row, id: \.self) { key(digit: $0) }
                 }
             }
-            vStack.addArrangedSubview(hStack)
-        }
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var intrinsicContentSize: CGSize {
-        CGSize(width: UIView.noIntrinsicMetric, height: 248)
-    }
-
-    @objc private func tap(_ sender: UIButton) {
-        guard let t = sender.currentTitle else { return }
-        t == "⌫" ? onDelete() : onInsert(t)
-    }
-}
-
-// MARK: - UITextField wrappers (stable keyboard type on iPad)
-//
-// The Coordinator holds a plain Binding (not @Binding) refreshed in
-// updateUIView — required when the caller creates an inline Binding closure
-// that captures a value-type (struct), which becomes stale after each
-// parent re-render.
-
-final class LockedKeyboardTextField: UITextField {
-    private let lockedType: UIKeyboardType
-    var isDark: Bool = false { didSet { if oldValue != isDark { syncInputView() } } }
-
-    init(keyboardType: UIKeyboardType) {
-        lockedType = keyboardType
-        super.init(frame: .zero)
-        super.keyboardType = keyboardType
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var keyboardType: UIKeyboardType {
-        get { super.keyboardType }
-        set { super.keyboardType = lockedType }
-    }
-
-    // On iPad, always replace the system keyboard with our own pad — iPad has no
-    // dedicated numberPad layout and falls back to the full keyboard otherwise.
-    // On iPhone, fall back to the system keyboard with keyboardAppearance.
-    func syncInputView() {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            let pad = DarkNumberPad(allowsDecimal: lockedType == .decimalPad, isDark: isDark)
-            pad.onInsert = { [weak self] s in
-                self?.insertText(s)
-                self?.sendActions(for: .editingChanged)
-            }
-            pad.onDelete = { [weak self] in
-                self?.deleteBackward()
-                self?.sendActions(for: .editingChanged)
-            }
-            inputView = pad
-        } else {
-            inputView = nil
-            super.keyboardAppearance = isDark ? .dark : .default
-        }
-        if isFirstResponder { reloadInputViews() }
-    }
-
-    // System keyboard path only: lock type and appearance after keyboard animates in.
-    override func becomeFirstResponder() -> Bool {
-        if inputView == nil { super.keyboardAppearance = isDark ? .dark : .default }
-        let ok = super.becomeFirstResponder()
-        if ok && inputView == nil {
-            NotificationCenter.default.addObserver(
-                self, selector: #selector(keyboardFullyShown),
-                name: UIResponder.keyboardDidShowNotification, object: nil
-            )
-        }
-        if ok && inputView != nil {
-            // A floating/undocked system keyboard lives in its own window and is
-            // presented during the focus transition, before the custom pad takes
-            // over. Reload synchronously (no animation) so it never gets a frame,
-            // plus once more async as safety net for the floating-mode window.
-            UIView.performWithoutAnimation { self.reloadInputViews() }
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.isFirstResponder else { return }
-                UIView.performWithoutAnimation { self.reloadInputViews() }
+            HStack(spacing: 8) {
+                if allowsDecimal {
+                    padButton(separator, action: insertSeparator)
+                } else {
+                    Color.clear.frame(width: 72, height: 52)
+                }
+                key(digit: "0")
+                padButton("⌫", role: .action) {
+                    if !text.isEmpty { text.removeLast() }
+                }
             }
         }
-        return ok
     }
 
-    override func resignFirstResponder() -> Bool {
-        NotificationCenter.default.removeObserver(
-            self, name: UIResponder.keyboardDidShowNotification, object: nil
-        )
-        return super.resignFirstResponder()
+    private func key(digit: String) -> some View {
+        padButton(digit) { text += digit }
     }
 
-    @objc private func keyboardFullyShown() {
-        NotificationCenter.default.removeObserver(
-            self, name: UIResponder.keyboardDidShowNotification, object: nil
-        )
-        guard isFirstResponder, inputView == nil else { return }
-        super.keyboardType = lockedType
-        super.keyboardAppearance = isDark ? .dark : .default
-        reloadInputViews()
-    }
-}
+    private enum PadRole { case digit, action }
 
-// Shared coordinator used by both String-binding wrappers below.
-final class KBInputCoordinator: NSObject, UITextFieldDelegate {
-    var binding: Binding<String>
-    private let target: UIKeyboardType
-    private let allowed: CharacterSet
-
-    init(text: Binding<String>, target: UIKeyboardType) {
-        self.binding = text
-        self.target  = target
-        self.allowed = target == .decimalPad
-            ? CharacterSet.decimalDigits.union(CharacterSet(charactersIn: ",."))
-            : .decimalDigits
+    private func padButton(_ label: String, role: PadRole = .digit,
+                           action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: role == .digit ? 24 : 20, weight: .regular))
+                .monospacedDigit()
+                .foregroundColor(.primary)
+                .frame(width: 72, height: 52)
+                .background(Color(UIColor.tertiarySystemFill))
+                .cornerRadius(10)
+        }
+        .buttonStyle(.plain)
     }
 
-    // Fires before the keyboard animation starts — correct moment to ensure
-    // the type is set so iOS picks the right layout from the very first frame.
-    // With a custom inputView the system keyboard must stay untouched, otherwise
-    // iOS spins it up additionally (visible as floating popup next to the pad).
-    func textFieldShouldBeginEditing(_ f: UITextField) -> Bool {
-        if f.inputView == nil { f.keyboardType = target }
-        return true
+    private func insertSeparator() {
+        guard !text.contains(",") && !text.contains(".") else { return }
+        text += text.isEmpty ? "0\(separator)" : separator
     }
-
-    func textFieldDidBeginEditing(_ f: UITextField) {
-        // Belt-and-suspenders: re-assert after focus is confirmed.
-        // No reloadInputViews() — calling it during the keyboard animation
-        // dismisses the keyboard immediately on iPad.
-        if f.inputView == nil { f.keyboardType = target }
-    }
-
-    func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
-                   replacementString s: String) -> Bool {
-        s.isEmpty || s.unicodeScalars.allSatisfy { allowed.contains($0) }
-    }
-
-    // Live sync on every keystroke — the binding must never lag behind the
-    // visible text, otherwise "Runde auswerten" reads a stale value while a
-    // field is still first responder.
-    @objc func editingChanged(_ f: UITextField) { binding.wrappedValue = f.text ?? "" }
-
-    func textFieldDidEndEditing(_ f: UITextField) { binding.wrappedValue = f.text ?? "" }
-    func textFieldShouldReturn(_ f: UITextField) -> Bool { f.resignFirstResponder(); return true }
 }
 
 /// Number pad, String binding (e.g. Tiebreak point fields).
-struct NumberStringInputField: UIViewRepresentable {
-    typealias Coordinator = KBInputCoordinator
+struct NumberStringInputField: View {
     var placeholder: String = "0"
     @Binding var text: String
-    @Environment(\.colorScheme) private var colorScheme
 
-    func makeUIView(context: Context) -> LockedKeyboardTextField {
-        let f = LockedKeyboardTextField(keyboardType: .numberPad)
-        f.textAlignment = .center
-        f.font = .monospacedDigitSystemFont(ofSize: 20, weight: .bold)
-        f.placeholder = placeholder
-        f.autocorrectionType = .no; f.spellCheckingType = .no
-        f.isDark = colorScheme == .dark
-        f.syncInputView()
-        f.delegate = context.coordinator
-        f.addTarget(context.coordinator, action: #selector(KBInputCoordinator.editingChanged(_:)), for: .editingChanged)
-        return f
+    var body: some View {
+        KBNumPadField(text: $text, placeholder: placeholder, allowsDecimal: false)
     }
-
-    func updateUIView(_ f: LockedKeyboardTextField, context: Context) {
-        context.coordinator.binding = $text
-        if !f.isFirstResponder { f.text = text }
-        f.isDark = colorScheme == .dark   // triggers syncInputView() via didSet
-    }
-
-    func makeCoordinator() -> KBInputCoordinator { KBInputCoordinator(text: $text, target: .numberPad) }
 }
 
 /// Decimal pad, String binding (e.g. payment amount fields).
-struct DecimalInputField: UIViewRepresentable {
-    typealias Coordinator = KBInputCoordinator
+struct DecimalInputField: View {
     var placeholder: String = "0,00"
     @Binding var text: String
-    @Environment(\.colorScheme) private var colorScheme
 
-    func makeUIView(context: Context) -> LockedKeyboardTextField {
-        let f = LockedKeyboardTextField(keyboardType: .decimalPad)
-        f.textAlignment = .right
-        f.font = .systemFont(ofSize: 17)
-        f.placeholder = placeholder
-        f.autocorrectionType = .no; f.spellCheckingType = .no
-        f.isDark = colorScheme == .dark
-        f.syncInputView()
-        f.delegate = context.coordinator
-        f.addTarget(context.coordinator, action: #selector(KBInputCoordinator.editingChanged(_:)), for: .editingChanged)
-        return f
+    var body: some View {
+        KBNumPadField(
+            text: $text,
+            placeholder: placeholder,
+            allowsDecimal: true,
+            alignment: .trailing,
+            font: .system(size: 17)
+        )
     }
-
-    func updateUIView(_ f: LockedKeyboardTextField, context: Context) {
-        context.coordinator.binding = $text
-        if !f.isFirstResponder { f.text = text }
-        f.isDark = colorScheme == .dark
-    }
-
-    func makeCoordinator() -> KBInputCoordinator { KBInputCoordinator(text: $text, target: .decimalPad) }
 }

@@ -198,147 +198,18 @@ struct ScoreCell: View {
     }
 }
 
-private final class LockedNumberTextField: UITextField {
-    var isDark: Bool = false { didSet { if oldValue != isDark { syncInputView() } } }
-
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        super.keyboardType = .numberPad
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    override var keyboardType: UIKeyboardType {
-        get { super.keyboardType }
-        set { super.keyboardType = .numberPad }
-    }
-
-    func syncInputView() {
-        if UIDevice.current.userInterfaceIdiom == .pad {
-            let pad = DarkNumberPad(allowsDecimal: false, isDark: isDark)
-            pad.onInsert = { [weak self] s in
-                self?.insertText(s)
-                self?.sendActions(for: .editingChanged)
-            }
-            pad.onDelete = { [weak self] in
-                self?.deleteBackward()
-                self?.sendActions(for: .editingChanged)
-            }
-            inputView = pad
-        } else {
-            inputView = nil
-            super.keyboardAppearance = isDark ? .dark : .default
-        }
-        if isFirstResponder { reloadInputViews() }
-    }
-
-    override func becomeFirstResponder() -> Bool {
-        if inputView == nil { super.keyboardAppearance = isDark ? .dark : .default }
-        let ok = super.becomeFirstResponder()
-        if ok && inputView == nil {
-            NotificationCenter.default.addObserver(
-                self, selector: #selector(keyboardFullyShown),
-                name: UIResponder.keyboardDidShowNotification, object: nil
-            )
-        }
-        if ok && inputView != nil {
-            // A floating/undocked system keyboard lives in its own window and is
-            // presented during the focus transition, before the custom pad takes
-            // over. Reload synchronously (no animation) so it never gets a frame,
-            // plus once more async as safety net for the floating-mode window.
-            UIView.performWithoutAnimation { self.reloadInputViews() }
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.isFirstResponder else { return }
-                UIView.performWithoutAnimation { self.reloadInputViews() }
-            }
-        }
-        return ok
-    }
-
-    override func resignFirstResponder() -> Bool {
-        NotificationCenter.default.removeObserver(
-            self, name: UIResponder.keyboardDidShowNotification, object: nil
-        )
-        return super.resignFirstResponder()
-    }
-
-    @objc private func keyboardFullyShown() {
-        NotificationCenter.default.removeObserver(
-            self, name: UIResponder.keyboardDidShowNotification, object: nil
-        )
-        guard isFirstResponder, inputView == nil else { return }
-        super.keyboardType = .numberPad
-        super.keyboardAppearance = isDark ? .dark : .default
-        reloadInputViews()
-    }
-}
-
-// UIViewRepresentable wrapper for integer score cells.
-// Coordinator.binding is refreshed in updateUIView to avoid writing into a
-// stale Player struct capture (Player is a value type; ForEach re-creates
-// the binding closure on every vm.players change).
-private struct NumberInputField: UIViewRepresentable {
+private struct NumberInputField: View {
     @Binding var value: Int
-    @Environment(\.colorScheme) private var colorScheme
 
-    func makeUIView(context: Context) -> LockedNumberTextField {
-        let f = LockedNumberTextField()
-        f.textAlignment      = .center
-        f.font               = .monospacedDigitSystemFont(ofSize: 16, weight: .regular)
-        f.placeholder        = "0"
-        f.autocorrectionType = .no
-        f.spellCheckingType  = .no
-        f.isDark             = colorScheme == .dark
-        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
-        f.syncInputView()
-        f.delegate           = context.coordinator
-        f.addTarget(context.coordinator, action: #selector(Coordinator.editingChanged(_:)), for: .editingChanged)
-        return f
-    }
-
-    func updateUIView(_ f: LockedNumberTextField, context: Context) {
-        context.coordinator.binding = $value
-        if !f.isFirstResponder {
-            f.text = value > 0 ? "\(value)" : ""
-        }
-        f.isDark             = colorScheme == .dark
-        f.keyboardAppearance = colorScheme == .dark ? .dark : .default
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(value: $value) }
-
-    final class Coordinator: NSObject, UITextFieldDelegate {
-        var binding: Binding<Int>
-        init(value: Binding<Int>) { self.binding = value }
-
-        // With a custom inputView the system keyboard must stay untouched,
-        // otherwise iOS spins it up additionally (floating popup next to the pad).
-        func textFieldShouldBeginEditing(_ f: UITextField) -> Bool {
-            if f.inputView == nil { f.keyboardType = .numberPad }
-            return true
-        }
-
-        func textFieldDidBeginEditing(_ f: UITextField) {
-            if f.inputView == nil { f.keyboardType = .numberPad }
-        }
-
-        func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
-                       replacementString s: String) -> Bool {
-            s.isEmpty || s.unicodeScalars.allSatisfy { CharacterSet.decimalDigits.contains($0) }
-        }
-
-        // Live sync — the binding must never lag behind the visible text.
-        @objc func editingChanged(_ f: UITextField) {
-            binding.wrappedValue = f.text.flatMap(Int.init) ?? 0
-        }
-
-        func textFieldDidEndEditing(_ f: UITextField) {
-            let v = f.text.flatMap(Int.init) ?? 0
-            binding.wrappedValue = v
-            f.text = v > 0 ? "\(v)" : ""
-        }
-
-        func textFieldShouldReturn(_ f: UITextField) -> Bool {
-            f.resignFirstResponder(); return true
-        }
+    var body: some View {
+        KBNumPadField(
+            text: Binding(
+                get: { value > 0 ? String(value) : "" },
+                set: { value = Int($0) ?? 0 }
+            ),
+            placeholder: "0",
+            allowsDecimal: false,
+            font: .system(size: 16, weight: .regular).monospacedDigit()
+        )
     }
 }
