@@ -350,7 +350,9 @@ struct KBNumPadField: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $showPad, arrowEdge: .top) {
+        // Keine feste arrowEdge: iOS wählt selbst die Seite mit genug Platz,
+        // sonst wird das Pad bei Feldern am Bildschirmrand abgeschnitten.
+        .popover(isPresented: $showPad) {
             KBNumPadGrid(text: $text, allowsDecimal: allowsDecimal) {
                 showPad = false
             }
