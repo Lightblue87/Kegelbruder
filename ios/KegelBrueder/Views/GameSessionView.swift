@@ -240,6 +240,15 @@ private final class LockedNumberTextField: UITextField {
                 name: UIResponder.keyboardDidShowNotification, object: nil
             )
         }
+        if ok && inputView != nil {
+            // A floating/undocked system keyboard lives in its own window and can
+            // stay visible next to the custom pad. Reload once after the focus
+            // transition so only the custom inputView remains.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isFirstResponder else { return }
+                self.reloadInputViews()
+            }
+        }
         return ok
     }
 
@@ -299,13 +308,15 @@ private struct NumberInputField: UIViewRepresentable {
         var binding: Binding<Int>
         init(value: Binding<Int>) { self.binding = value }
 
+        // With a custom inputView the system keyboard must stay untouched,
+        // otherwise iOS spins it up additionally (floating popup next to the pad).
         func textFieldShouldBeginEditing(_ f: UITextField) -> Bool {
-            f.keyboardType = .numberPad
+            if f.inputView == nil { f.keyboardType = .numberPad }
             return true
         }
 
         func textFieldDidBeginEditing(_ f: UITextField) {
-            f.keyboardType = .numberPad
+            if f.inputView == nil { f.keyboardType = .numberPad }
         }
 
         func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,

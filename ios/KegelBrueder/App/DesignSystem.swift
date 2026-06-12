@@ -443,6 +443,15 @@ final class LockedKeyboardTextField: UITextField {
                 name: UIResponder.keyboardDidShowNotification, object: nil
             )
         }
+        if ok && inputView != nil {
+            // A floating/undocked system keyboard lives in its own window and can
+            // stay visible next to the custom pad. Reload once after the focus
+            // transition so only the custom inputView remains.
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.isFirstResponder else { return }
+                self.reloadInputViews()
+            }
+        }
         return ok
     }
 
@@ -480,8 +489,10 @@ final class KBInputCoordinator: NSObject, UITextFieldDelegate {
 
     // Fires before the keyboard animation starts — correct moment to ensure
     // the type is set so iOS picks the right layout from the very first frame.
+    // With a custom inputView the system keyboard must stay untouched, otherwise
+    // iOS spins it up additionally (visible as floating popup next to the pad).
     func textFieldShouldBeginEditing(_ f: UITextField) -> Bool {
-        f.keyboardType = target
+        if f.inputView == nil { f.keyboardType = target }
         return true
     }
 
@@ -489,7 +500,7 @@ final class KBInputCoordinator: NSObject, UITextFieldDelegate {
         // Belt-and-suspenders: re-assert after focus is confirmed.
         // No reloadInputViews() — calling it during the keyboard animation
         // dismisses the keyboard immediately on iPad.
-        f.keyboardType = target
+        if f.inputView == nil { f.keyboardType = target }
     }
 
     func textField(_ tf: UITextField, shouldChangeCharactersIn range: NSRange,
