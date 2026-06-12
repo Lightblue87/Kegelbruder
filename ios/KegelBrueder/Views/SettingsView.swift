@@ -1,157 +1,167 @@
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @EnvironmentObject var vm: AppViewModel
-    @StateObject private var sync = SyncManager.shared
+    @StateObject private var sync  = SyncManager.shared
+    @StateObject private var store = DataStore.shared
 
-    @State private var startgeld: String = ""
-    @State private var pumpe: String = ""
-    @State private var neuner: String = ""
-    @State private var kranz: String = ""
+    @AppStorage("appColorScheme")  private var colorSchemeRaw: Int    = 0
+    // Persisted across launches so the user doesn't have to re-paste the link
+    @AppStorage("savedICloudLink") private var iCloudLink: String     = ""
+
+    @State private var showFolderPicker = false
+    @State private var startgeld:   String = ""
+    @State private var pumpe:       String = ""
+    @State private var neuner:      String = ""
+    @State private var kranz:       String = ""
     @State private var strafeStamm: String = ""
     @State private var bahngebuehr: String = ""
     @State private var saved = false
 
-    @State private var linkInput: String = ""
-    @State private var isValidating = false
-    @State private var linkSaved = false
-    @State private var linkError: String? = nil
-
     var body: some View {
         Form {
-            // OneDrive Sync Section
-            Section {
-                VStack(alignment: .leading, spacing: 10) {
-                    // Status
-                    HStack(spacing: 8) {
-                        if sync.status.isLoading {
-                            ProgressView().scaleEffect(0.8)
-                        } else {
-                            Image(systemName: syncStatusIcon)
-                                .foregroundColor(syncStatusColor)
-                        }
-                        Text(sync.status == .idle ? (sync.hasLink ? "Verbunden" : "Kein Link") : sync.status.message)
-                            .font(.subheadline)
-                            .foregroundColor(syncStatusColor)
-                    }
-
-                    TextField("https://1drv.ms/f/s!A...", text: $linkInput)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-                        .keyboardType(.URL)
-                        .font(.caption)
-
-                    if let err = linkError {
-                        Text(err).font(.caption).foregroundColor(.red)
-                    }
-
-                    HStack(spacing: 12) {
-                        Button {
-                            Task { await speichereLink() }
-                        } label: {
-                            if isValidating {
-                                ProgressView().scaleEffect(0.8)
-                            } else {
-                                Text(linkSaved ? "Gespeichert ✓" : "Link speichern")
+            Group {
+                Section {
+                    // ── Step 1: Paste the iCloud share link ──────────────────
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("iCloud Freigabe-Link")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        HStack(spacing: 8) {
+                            TextField("https://www.icloud.com/iclouddrive/…",
+                                      text: $iCloudLink)
+                                .keyboardType(.URL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .font(.footnote)
+                            Button {
+                                openICloudLink()
+                            } label: {
+                                Text("Öffnen")
+                                    .font(.footnote.bold())
                             }
+                            .buttonStyle(.borderedProminent)
+                            .controlSize(.small)
+                            .disabled(iCloudLink.trimmingCharacters(in: .whitespaces).isEmpty)
                         }
-                        .disabled(linkInput.isEmpty || isValidating)
-                        .buttonStyle(.bordered)
-                        .tint(linkSaved ? .green : .accentColor)
-
-                        Button {
-                            Task { await sync.downloadAll() }
-                        } label: {
-                            Label("Jetzt sync", systemImage: "arrow.clockwise")
-                        }
-                        .disabled(!sync.hasLink || sync.status.isLoading)
-                        .buttonStyle(.bordered)
                     }
+                    .padding(.vertical, 2)
 
-                    if let last = sync.lastSync {
-                        Text("Letzter Sync: \(formatLastSync(last))")
+                    // ── Step 2: Pick the shared folder once ──────────────────
+                    Button {
+                        showFolderPicker = true
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: "folder.badge.plus")
+                                .foregroundColor(.kbPrimary)
+                            Text("Freigegebenen Ordner wählen")
+                                .foregroundColor(.kbPrimary)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    // ── Status after folder is selected ──────────────────────
+                    if store.iCloudAvailable {
+                        HStack(spacing: 10) {
+                            Image(systemName: store.writeAccessOK
+                                  ? "checkmark.shield.fill"
+                                  : "xmark.shield.fill")
+                                .foregroundColor(store.writeAccessOK ? .kbSuccess : .kbDanger)
+                                .font(.title3)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(store.folderName)
+                                    .font(.subheadline.bold())
+                                Text(store.writeAccessOK
+                                     ? "Lese- & Schreibzugriff bestätigt"
+                                     : "Kein Schreibzugriff – Ordner prüfen")
+                                    .font(.caption)
+                                    .foregroundColor(store.writeAccessOK ? .kbSuccess : .kbDanger)
+                            }
+                            Spacer()
+                            Button {
+                                Task { await sync.downloadAll(); vm.laden() }
+                            } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            .disabled(sync.status.isLoading || !store.writeAccessOK)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                } header: {
+                    Label("Datenbankordner", systemImage: "externaldrive.connected.to.line.below")
+                } footer: {
+                    if store.iCloudAvailable {
+                        Text(store.dbPath)
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("1. Link aus iCloud Drive einfügen -> \"Öffnen\" tippt den Ordner in der Files-App an.\n2. Zurück zur App -> \"Freigegebenen Ordner wählen\" -> Ordner antippen -> fertig.\nDer Zugriff wird einmalig erteilt und danach automatisch wiederhergestellt.")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                     }
                 }
-                .padding(.vertical, 4)
-            } header: {
-                Label("OneDrive Synchronisation", systemImage: "cloud")
-            } footer: {
-                Text("Freigabelink mit 'Jeder mit dem Link kann bearbeiten'. Internet wird nur zum Sync benötigt.")
+
+                Section("Erscheinungsbild") {
+                    Picker("Darstellung", selection: $colorSchemeRaw) {
+                        Text("Systemeinstellung").tag(0)
+                        Text("Hell").tag(2)
+                        Text("Dunkel").tag(1)
+                    }
+                }
             }
 
-            Section("Gebühren") {
-                BetragField(label: "Startgeld", value: $startgeld)
-                BetragField(label: "Strafe (Abwesend)", value: $strafeStamm)
-                BetragField(label: "Bahngebühr", value: $bahngebuehr)
-            }
+            Group {
+                Section("Gebühren") {
+                    BetragField(label: "Startgeld",          value: $startgeld)
+                    BetragField(label: "Strafe (Abwesend)",  value: $strafeStamm)
+                    BetragField(label: "Bahngebühr",         value: $bahngebuehr)
+                }
 
-            Section("Strafen & Boni") {
-                BetragField(label: "Pumpe (Gutter)", value: $pumpe)
-                BetragField(label: "Neuner", value: $neuner)
-                BetragField(label: "Kranz", value: $kranz)
-            }
+                Section("Strafen & Boni") {
+                    BetragField(label: "Pumpe (Gutter)", value: $pumpe)
+                    BetragField(label: "Neuner",         value: $neuner)
+                    BetragField(label: "Kranz",          value: $kranz)
+                }
 
-            Section {
-                Button("Speichern") { speichern() }
-                    .frame(maxWidth: .infinity)
-                    .buttonStyle(.borderedProminent)
+                Section {
+                    Button("Speichern") { speichern() }
+                        .frame(maxWidth: .infinity)
+                        .buttonStyle(.borderedProminent)
 
-                if saved {
-                    HStack {
-                        Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
-                        Text("Gespeichert!")
-                            .foregroundColor(.green)
+                    if saved {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                            Text("Gespeichert!").foregroundColor(.green)
+                        }
                     }
                 }
             }
         }
-        .navigationTitle("Kosten Einstellungen")
-        .onAppear {
-            laden()
-            linkInput = sync.sharingLink
+        .navigationTitle("Einstellungen")
+        .onAppear { laden() }
+        .sheet(isPresented: $showFolderPicker) {
+            DocumentDirectoryPicker { url in
+                store.saveBookmark(for: url)
+                vm.laden()
+                showFolderPicker = false
+            }
         }
     }
 
-    private var syncStatusIcon: String {
-        switch sync.status {
-        case .idle:    return sync.hasLink ? "checkmark.circle" : "xmark.circle"
-        case .syncing: return "arrow.clockwise"
-        case .success: return "checkmark.circle.fill"
-        case .error:   return "exclamationmark.triangle.fill"
-        }
+    // MARK: - Actions
+
+    private func openICloudLink() {
+        let trimmed = iCloudLink.trimmingCharacters(in: .whitespaces)
+        guard let url = URL(string: trimmed), url.scheme != nil else { return }
+        UIApplication.shared.open(url)
     }
 
-    private var syncStatusColor: Color {
-        switch sync.status {
-        case .idle:    return sync.hasLink ? .green : .secondary
-        case .syncing: return .blue
-        case .success: return .green
-        case .error:   return .red
-        }
-    }
-
-    private func speichereLink() async {
-        isValidating = true
-        linkError = nil
-        linkSaved = false
-        let ok = await sync.validateAndSaveLink(linkInput)
-        isValidating = false
-        if ok {
-            linkSaved = true
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { linkSaved = false }
-        } else {
-            linkError = "Link ungültig oder kein Schreibzugriff"
-        }
-    }
-
-    private func formatLastSync(_ date: Date) -> String {
-        let f = DateFormatter()
-        f.dateFormat = "dd.MM.yyyy HH:mm"
-        return f.string(from: date)
-    }
+    // MARK: - Helpers
 
     private func laden() {
         let k = vm.kasse
@@ -164,12 +174,15 @@ struct SettingsView: View {
     }
 
     private func speichern() {
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
         var k = vm.kasse
         k.Startgeld    = parse(startgeld)   ?? k.Startgeld
         k.Pumpe        = parse(pumpe)        ?? k.Pumpe
         k.Neuner       = parse(neuner)       ?? k.Neuner
         k.Kranz        = parse(kranz)        ?? k.Kranz
-        k.Strafe_Stamm = parse(strafeStamm) ?? k.Strafe_Stamm
+        k.Strafe_Stamm = parse(strafeStamm)  ?? k.Strafe_Stamm
         k.Bahngebuehr  = parse(bahngebuehr)  ?? k.Bahngebuehr
         vm.einstellungenSpeichern(k)
         saved = true
@@ -182,6 +195,8 @@ struct SettingsView: View {
     }
 }
 
+// MARK: - BetragField
+
 struct BetragField: View {
     let label: String
     @Binding var value: String
@@ -190,12 +205,9 @@ struct BetragField: View {
         HStack {
             Text(label)
             Spacer()
-            TextField("0,00", text: $value)
-                .keyboardType(.decimalPad)
-                .multilineTextAlignment(.trailing)
-                .frame(width: 80)
-            Text("€")
-                .foregroundColor(.secondary)
+            DecimalInputField(text: $value)
+                .frame(width: 80, height: 32)
+            Text("€").foregroundColor(.secondary)
         }
     }
 }

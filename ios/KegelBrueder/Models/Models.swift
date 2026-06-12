@@ -40,6 +40,7 @@ struct KasseFile: Codable {
     var Strafe_Stamm: Double
     var Bahngebuehr: Double
     var Kassenstand: Double
+    var Kontostand: Double
     var Transaktionen: [String]
     var Letzte_Startgebuehren: Double
 
@@ -47,7 +48,7 @@ struct KasseFile: Codable {
         case Startgeld, Pumpe, Neuner, Kranz
         case Strafe_Stamm = "Strafe Stamm"
         case Bahngebuehr = "Bahngebühr"
-        case Kassenstand, Transaktionen
+        case Kassenstand, Kontostand, Transaktionen
         case Letzte_Startgebuehren = "Letzte_Startgebuehren"
     }
 
@@ -55,17 +56,21 @@ struct KasseFile: Codable {
         KasseFile(
             Startgeld: 5.0, Pumpe: 0.5, Neuner: 1.0, Kranz: 2.0,
             Strafe_Stamm: 7.5, Bahngebuehr: 30.0,
-            Kassenstand: 0.0, Transaktionen: [], Letzte_Startgebuehren: 0.0
+            Kassenstand: 0.0, Kontostand: 0.0, Transaktionen: [], Letzte_Startgebuehren: 0.0
         )
     }
 }
 
-struct HistorieEntry: Codable, Identifiable {
-    var id: String { datum }
+struct HistorieEntry: Codable, Identifiable, Hashable {
+    var id: String { "\(spielId)" }
+    var spielId: Int
     var datum: String
     var players: [String: PlayerData]
     var transaktionen: [String]
     var spieler_reihenfolge: [String]?
+
+    func hash(into hasher: inout Hasher) { hasher.combine(spielId) }
+    static func == (lhs: HistorieEntry, rhs: HistorieEntry) -> Bool { lhs.spielId == rhs.spielId }
 }
 
 struct AppLockFile: Codable {
@@ -141,6 +146,14 @@ struct BillingRow: Identifiable {
     var zuZahlen: Double
     var gezahlt: Double = 0.0
     var spende: Double { max(0, gezahlt - zuZahlen) }
+
+    // Kostenaufschlüsselung: eigene Pumpen plus 9er/Kränze der anderen Spieler
+    var pumpenAnzahl: Int = 0
+    var pumpenBetrag: Double = 0
+    var fremdeNeuner: Int = 0
+    var fremdeNeunerBetrag: Double = 0
+    var fremdeKraenze: Int = 0
+    var fremdeKraenzeBetrag: Double = 0
 }
 
 // MARK: - Tiebreak state

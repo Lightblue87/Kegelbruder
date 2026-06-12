@@ -15,19 +15,14 @@ struct PlayerManagementView: View {
             ForEach(sortedPlayers, id: \.0) { name, data in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack {
+                        HStack(spacing: 8) {
                             Text(name).font(.headline)
-                            Text(data.typ)
-                                .font(.caption)
-                                .padding(.horizontal, 6).padding(.vertical, 2)
-                                .background(data.typ == "Stamm" ? Color.blue.opacity(0.15) : Color.orange.opacity(0.15))
-                                .foregroundColor(data.typ == "Stamm" ? .blue : .orange)
-                                .cornerRadius(4)
+                            KBPill(data.typ, tone: data.typ == "Stamm" ? .primary : .guest)
                         }
                         if data.offene_zahlung > 0 {
-                            Text("Offen: \(String(format: "%.2f", data.offene_zahlung)) €")
-                                .font(.caption)
-                                .foregroundColor(.red)
+                            Text(String(format: "Offen: %.2f €", data.offene_zahlung))
+                                .font(.system(size: 12))
+                                .foregroundColor(.kbDanger)
                         }
                     }
                     Spacer()
@@ -114,17 +109,15 @@ struct PlayerEditSheet: View {
                         HStack {
                             Text("Offener Betrag (€)")
                             Spacer()
-                            TextField("0,00", text: $schulden)
-                                .keyboardType(.decimalPad)
-                                .multilineTextAlignment(.trailing)
-                                .frame(width: 80)
+                            DecimalInputField(text: $schulden)
+                                .frame(width: 80, height: 32)
                         }
                     }
                 }
 
                 if let err = error {
                     Section {
-                        Text(err).foregroundColor(.red)
+                        Text(err).foregroundColor(.kbDanger)
                     }
                 }
             }
@@ -147,6 +140,13 @@ struct PlayerEditSheet: View {
     }
 
     private func speichern() {
+        // Resign the active text field so textFieldDidEndEditing fires and
+        // flushes the DecimalInputField's current text into the `schulden` binding
+        // before we read it. Without this, tapping Speichern while the field is
+        // still focused reads the stale (empty) binding value and saves 0.
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
+        )
         let n = name.trimmingCharacters(in: .whitespaces)
         guard !n.isEmpty else { error = "Name darf nicht leer sein."; return }
         let cleaned = schulden.replacingOccurrences(of: ",", with: ".")
