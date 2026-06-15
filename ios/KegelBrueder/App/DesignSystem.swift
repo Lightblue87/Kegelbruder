@@ -202,23 +202,33 @@ extension Double {
 // MARK: - App background (gradient + ambient blobs, Liquid Glass backing)
 
 struct KBAppBackground: View {
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                LinearGradient(
-                    colors: [Color(hex: "#eef3fb"), Color(hex: "#dbe4f1")],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                if scheme == .dark {
+                    LinearGradient(
+                        colors: [Color(hex: "#0d1117"), Color(hex: "#0b0f1a"), Color(hex: "#0e1320")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                } else {
+                    LinearGradient(
+                        colors: [Color(hex: "#eef3fb"), Color(hex: "#dbe4f1")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
                 // Blue ambient blob – upper left
                 Circle()
-                    .fill(Color.kbPrimary.opacity(0.28))
+                    .fill(Color.kbPrimary.opacity(scheme == .dark ? 0.22 : 0.28))
                     .frame(width: 520, height: 520)
                     .blur(radius: 90)
                     .position(x: geo.size.width * 0.25, y: -60)
                 // Brass ambient blob – lower right
                 Circle()
-                    .fill(Color.kbBrass400.opacity(0.20))
+                    .fill(Color.kbBrass400.opacity(scheme == .dark ? 0.16 : 0.20))
                     .frame(width: 460, height: 460)
                     .blur(radius: 90)
                     .position(x: geo.size.width * 0.85, y: geo.size.height + 80)
