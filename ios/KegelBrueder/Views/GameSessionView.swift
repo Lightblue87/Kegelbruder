@@ -75,7 +75,7 @@ struct GameSessionView: View {
         .font(.system(size: 12, weight: .bold))
         .foregroundColor(.kbTextSecondary)
         .padding(.vertical, 8)
-        .background(Color(UIColor.systemGroupedBackground))
+        .background(.regularMaterial)
     }
 }
 
