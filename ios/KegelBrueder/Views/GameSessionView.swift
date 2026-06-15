@@ -21,6 +21,10 @@ struct GameSessionView: View {
                         Divider()
                     }
                 }
+                // Tabelle wächst bis 960 px und zentriert sich — verhindert,
+                // dass die Spieler-Spalte bei eingeklappter Sidebar ins Unendliche wächst
+                .frame(maxWidth: 960)
+                .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 18)
         }

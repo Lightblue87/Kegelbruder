@@ -108,7 +108,7 @@ struct ContentView: View {
                 }
             }
             .navigationTitle("Kegel Brüder")
-            .listStyle(.insetGrouped)
+            .listStyle(.sidebar)
             .scrollContentBackground(.hidden)
             .background(.ultraThinMaterial)
         } detail: {
