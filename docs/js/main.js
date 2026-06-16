@@ -133,9 +133,6 @@ const actions = {
     };
     alertHostRender(vm.alert);
   },
-  openSheet(name) {
-    openSheet(name);
-  },
 };
 
 // ---------------------------------------------------------------- Theme

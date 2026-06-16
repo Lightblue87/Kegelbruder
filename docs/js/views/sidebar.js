@@ -46,16 +46,6 @@ export function renderSidebar(vm) {
         ${sidebarIconTile("⚙", "#aeaeb2")} Einstellungen
       </button>
     </div>
-
-    <div class="sidebar-section">
-      <div class="sidebar-section-label">Stechen</div>
-      <button class="sidebar-item" data-act="open-sheet" data-sheet="tiebreak">
-        ${sidebarIconTile("⚖", "var(--kb-brass-500)")} Stechen
-      </button>
-      <button class="sidebar-item" data-act="open-sheet" data-sheet="pumpenStechen">
-        ${sidebarIconTile("⚡", "var(--kb-pumpe)")} Pumpenstechen
-      </button>
-    </div>
   `;
 }
 
@@ -67,7 +57,6 @@ export function bindSidebar(el, vm, actions) {
       else if (act === "neues-spiel") actions.starteNeuesSpiel();
       else if (act === "abrechnung") actions.abrechnungStarten();
       else if (act === "abbrechen") actions.confirmAbbrechen();
-      else if (act === "open-sheet") actions.openSheet(node.dataset.sheet);
     });
   });
 }

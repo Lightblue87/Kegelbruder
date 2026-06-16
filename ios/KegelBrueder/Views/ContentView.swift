@@ -85,27 +85,6 @@ struct ContentView: View {
                         }
                     }
                 }
-
-                Section("Stechen") {
-                    Button {
-                        vm.activeSheet = .tiebreak
-                    } label: {
-                        Label {
-                            Text("Stechen")
-                        } icon: {
-                            KBSidebarIcon(systemName: "scalemass", tint: .kbBrass500)
-                        }
-                    }
-                    Button {
-                        vm.activeSheet = .pumpenStechen
-                    } label: {
-                        Label {
-                            Text("Pumpenstechen")
-                        } icon: {
-                            KBSidebarIcon(systemName: "bolt.fill", tint: .kbPumpe)
-                        }
-                    }
-                }
             }
             .navigationTitle("Kegel Brüder")
             .listStyle(.sidebar)
