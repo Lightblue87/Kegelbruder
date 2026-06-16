@@ -178,10 +178,66 @@ async function boot() {
 }
 boot();
 
-// ---------------------------------------------------------------- Service worker registration
+// ---------------------------------------------------------------- Service worker / auto-update
+
+function showUpdateBanner(onConfirm) {
+  if (document.getElementById("update-banner")) return; // already showing
+  const bar = document.createElement("div");
+  bar.id = "update-banner";
+  bar.innerHTML = `
+    <span>🔄 Neue Version verfügbar</span>
+    <button class="kb-btn prominent" id="update-banner-btn">Jetzt aktualisieren</button>
+  `;
+  document.body.appendChild(bar);
+  document.getElementById("update-banner-btn").addEventListener("click", () => {
+    bar.querySelector("span").textContent = "Aktualisiere …";
+    document.getElementById("update-banner-btn").remove();
+    onConfirm();
+  });
+}
 
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch((e) => console.warn("SW-Registrierung fehlgeschlagen:", e));
+  let refreshing = false;
+  // Once the new worker takes over, every client reloads exactly once.
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
+
+  window.addEventListener("load", async () => {
+    try {
+      const registration = await navigator.serviceWorker.register("./sw.js");
+
+      const promptIfWaiting = () => {
+        if (registration.waiting) {
+          showUpdateBanner(() => registration.waiting.postMessage("SKIP_WAITING"));
+        }
+      };
+      promptIfWaiting(); // covers the case where an update was already waiting from a previous visit
+
+      registration.addEventListener("updatefound", () => {
+        const installing = registration.installing;
+        if (!installing) return;
+        installing.addEventListener("statechange", () => {
+          // "installed" + an existing controller means this is an update,
+          // not the very first install — that one shouldn't show a banner.
+          if (installing.state === "installed" && navigator.serviceWorker.controller) {
+            promptIfWaiting();
+          }
+        });
+      });
+
+      // The browser only re-checks sw.js for changes on navigation, and at
+      // most every 24h on its own — actively re-check whenever the app is
+      // brought back to the foreground, plus a periodic fallback while it
+      // stays open (e.g. left running on a club tablet for hours).
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") registration.update().catch(() => {});
+      });
+      setInterval(() => registration.update().catch(() => {}), 30 * 60 * 1000);
+    } catch (e) {
+      console.warn("SW-Registrierung fehlgeschlagen:", e);
+    }
   });
 }

@@ -1,6 +1,6 @@
 // Kegel Brüder PWA — offline cache. Bump CACHE_NAME on any deploy that
 // changes a cached file so clients pick up the new version.
-const CACHE_NAME = "kegelbrueder-v3";
+const CACHE_NAME = "kegelbrueder-v4";
 
 const PRECACHE_URLS = [
   "./",
@@ -35,9 +35,11 @@ const PRECACHE_URLS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)).then(() => self.skipWaiting())
-  );
+  // No skipWaiting() here: a newly installed worker waits until the page
+  // explicitly confirms (via the "Jetzt aktualisieren" banner in main.js)
+  // that it's safe to take over — otherwise an update could silently swap
+  // out the running app while someone is mid-game entering scores.
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)));
 });
 
 self.addEventListener("activate", (event) => {
@@ -47,6 +49,11 @@ self.addEventListener("activate", (event) => {
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+// Triggered by main.js once the user taps "Jetzt aktualisieren".
+self.addEventListener("message", (event) => {
+  if (event.data === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("fetch", (event) => {
