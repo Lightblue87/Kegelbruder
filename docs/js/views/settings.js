@@ -74,20 +74,20 @@ export function mountSettings(el, vm, ctx) {
           <div class="kb-group-body">
             <div class="kb-row">
               <div class="leading">
-                <div style="font-weight:600">Daten exportieren</div>
-                <div style="font-size:12px;color:var(--kb-text-secondary)">Sichert Mitglieder, Kasse &amp; Archiv als Datei</div>
+                <div style="font-weight:600">Datenbank exportieren (.db)</div>
+                <div style="font-size:12px;color:var(--kb-text-secondary)">Echte SQLite-Datei — dasselbe Format wie kegelbruder.db aus der iOS-/Desktop-App</div>
               </div>
               <div class="trailing"><button class="kb-btn" data-act="export">⬇ Export</button></div>
             </div>
             <div class="kb-row-divider"></div>
             <div class="kb-row">
               <div class="leading">
-                <div style="font-weight:600">Daten importieren</div>
-                <div style="font-size:12px;color:var(--kb-text-secondary)">Überschreibt alle lokalen Daten auf diesem Gerät</div>
+                <div style="font-weight:600">Datenbank importieren (.db)</div>
+                <div style="font-size:12px;color:var(--kb-text-secondary)">Lädt eine kegelbruder.db (z.B. von der iOS-App) — überschreibt alle lokalen Daten auf diesem Gerät</div>
               </div>
               <div class="trailing">
                 <button class="kb-btn" data-act="import">⬆ Import</button>
-                <input type="file" id="import-file" accept="application/json" style="display:none" />
+                <input type="file" id="import-file" accept=".db,application/x-sqlite3,application/octet-stream" style="display:none" />
               </div>
             </div>
             ${importMsg ? `<div class="kb-row-divider"></div><div style="padding:10px 16px;font-size:13px;color:${importMsg.ok ? "var(--kb-success)" : "var(--kb-danger)"}">${escapeHtml(importMsg.text)}</div>` : ""}
@@ -158,11 +158,14 @@ export function mountSettings(el, vm, ctx) {
     });
 
     el.querySelector("[data-act='export']").addEventListener("click", () => {
-      const blob = new Blob([DB.exportJSON()], { type: "application/json" });
+      // Real SQLite binary, byte-identical format to kegelbruder.db from der
+      // iOS-/Desktop-App — kann dort direkt wieder geöffnet werden.
+      const bytes = DB.exportDb();
+      const blob = new Blob([bytes], { type: "application/x-sqlite3" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `kegelbrueder-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `kegelbruder-${new Date().toISOString().slice(0, 10)}.db`;
       a.click();
       URL.revokeObjectURL(url);
     });
@@ -173,19 +176,19 @@ export function mountSettings(el, vm, ctx) {
       const file = fileInput.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = () => {
+      reader.onload = async () => {
         try {
-          DB.importJSON(reader.result);
+          await DB.importDb(new Uint8Array(reader.result));
           vm.laden();
           ladenLocal();
           importMsg = { ok: true, text: "Import erfolgreich. Daten wurden übernommen." };
           ctx.refreshSidebar();
         } catch (e) {
-          importMsg = { ok: false, text: "Import fehlgeschlagen: Datei ungültig." };
+          importMsg = { ok: false, text: "Import fehlgeschlagen: Datei ist keine gültige kegelbruder.db." };
         }
         render();
       };
-      reader.readAsText(file);
+      reader.readAsArrayBuffer(file);
     });
 
     el.querySelector("[data-act='reset']").addEventListener("click", () => {

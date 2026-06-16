@@ -698,5 +698,10 @@ class Store {
   }
 }
 
-export const vm = new Store();
+// Factory instead of an eagerly-created singleton: the Store constructor
+// reads from DB.* synchronously, so DB.init() (async — loads sql.js +
+// IndexedDB) must resolve first. main.js awaits that, then calls this.
+export function createVm() {
+  return new Store();
+}
 export { newPlayer, summe, namesEqual, uniqueNames, uniquePlayersByName, toPlayerData, playerFromData };

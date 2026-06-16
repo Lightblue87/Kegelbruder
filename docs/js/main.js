@@ -1,4 +1,4 @@
-import { vm } from "./state.js";
+import { createVm } from "./state.js";
 import { DB } from "./db.js";
 import { renderSidebar, bindSidebar } from "./views/sidebar.js";
 import { renderReadyScreen, bindReadyScreen, renderGameSession, bindGameSession } from "./views/gameSession.js";
@@ -18,6 +18,7 @@ const detailEl = document.getElementById("detail");
 const sheetHost = document.getElementById("sheet-host");
 const sidebarToggle = document.getElementById("sidebar-toggle");
 
+let vm; // assigned once DB.init() resolves, see boot() at the bottom
 let lastDetailKey = undefined;
 
 function detailKey() {
@@ -155,15 +156,88 @@ function fullRender() {
   mountDetail();
 }
 
-vm.subscribe(fullRender);
+// ---------------------------------------------------------------- Boot
 
-applyTheme(DB.getSettings().theme || "system");
-fullRender();
+async function boot() {
+  try {
+    await DB.init(); // loads sql.js (WASM) + restores the SQLite blob from IndexedDB
+    vm = createVm();
+    vm.subscribe(fullRender);
+    applyTheme(DB.getSettings().theme || "system");
+    fullRender();
+  } catch (e) {
+    console.error("Start fehlgeschlagen:", e);
+    detailEl.innerHTML = `
+      <div class="u-empty" style="height:100%">
+        <div class="ico">⚠️</div>
+        <div style="font-size:18px;font-weight:600">App konnte nicht gestartet werden</div>
+        <div style="max-width:360px">${e?.message || e}</div>
+      </div>
+    `;
+  }
+}
+boot();
 
-// ---------------------------------------------------------------- Service worker registration
+// ---------------------------------------------------------------- Service worker / auto-update
+
+function showUpdateBanner(onConfirm) {
+  if (document.getElementById("update-banner")) return; // already showing
+  const bar = document.createElement("div");
+  bar.id = "update-banner";
+  bar.innerHTML = `
+    <span>🔄 Neue Version verfügbar</span>
+    <button class="kb-btn prominent" id="update-banner-btn">Jetzt aktualisieren</button>
+  `;
+  document.body.appendChild(bar);
+  document.getElementById("update-banner-btn").addEventListener("click", () => {
+    bar.querySelector("span").textContent = "Aktualisiere …";
+    document.getElementById("update-banner-btn").remove();
+    onConfirm();
+  });
+}
 
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch((e) => console.warn("SW-Registrierung fehlgeschlagen:", e));
+  let refreshing = false;
+  // Once the new worker takes over, every client reloads exactly once.
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    location.reload();
+  });
+
+  window.addEventListener("load", async () => {
+    try {
+      const registration = await navigator.serviceWorker.register("./sw.js");
+
+      const promptIfWaiting = () => {
+        if (registration.waiting) {
+          showUpdateBanner(() => registration.waiting.postMessage("SKIP_WAITING"));
+        }
+      };
+      promptIfWaiting(); // covers the case where an update was already waiting from a previous visit
+
+      registration.addEventListener("updatefound", () => {
+        const installing = registration.installing;
+        if (!installing) return;
+        installing.addEventListener("statechange", () => {
+          // "installed" + an existing controller means this is an update,
+          // not the very first install — that one shouldn't show a banner.
+          if (installing.state === "installed" && navigator.serviceWorker.controller) {
+            promptIfWaiting();
+          }
+        });
+      });
+
+      // The browser only re-checks sw.js for changes on navigation, and at
+      // most every 24h on its own — actively re-check whenever the app is
+      // brought back to the foreground, plus a periodic fallback while it
+      // stays open (e.g. left running on a club tablet for hours).
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") registration.update().catch(() => {});
+      });
+      setInterval(() => registration.update().catch(() => {}), 30 * 60 * 1000);
+    } catch (e) {
+      console.warn("SW-Registrierung fehlgeschlagen:", e);
+    }
   });
 }

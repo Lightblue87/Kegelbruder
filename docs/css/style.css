@@ -670,3 +670,26 @@ select.kb-select {
   #detail { padding-top: 58px; width: 100%; }
   .game-table { max-width: 100%; }
 }
+
+/* ---------- Update banner ---------- */
+
+#update-banner {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--kb-glass-bg);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--kb-glass-border);
+  box-shadow: 0 12px 30px var(--kb-shadow);
+  font-size: 14px;
+  font-weight: 600;
+  max-width: 90vw;
+}

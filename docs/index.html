@@ -23,13 +23,21 @@
 
   <div id="app-shell">
     <aside id="sidebar"></aside>
-    <main id="detail"></main>
+    <main id="detail">
+      <div class="u-empty" style="height:100%">
+        <div class="ico">🎳</div>
+        <div style="font-size:16px;font-weight:600">Lädt …</div>
+      </div>
+    </main>
   </div>
 
   <div id="sheet-host"></div>
   <div id="numpad-host"></div>
   <div id="alert-host"></div>
 
+  <!-- SQLite, compiled to WebAssembly, vendored locally (no CDN) — exposes
+       the global `initSqlJs()` used by js/db.js. Must load before main.js. -->
+  <script src="./vendor/sql-js/sql-wasm.js"></script>
   <script type="module" src="./js/main.js"></script>
 </body>
 </html>
