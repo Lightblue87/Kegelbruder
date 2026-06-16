@@ -152,15 +152,15 @@ export function mountSettings(el, vm, ctx) {
 
   function syncInput(label, key, placeholder, password = false) {
     return `
-      <label style="display:grid;gap:5px">
-        <span style="font-size:12px;color:var(--kb-text-secondary);font-weight:600">${label}</span>
+      <label class="kb-sync-field">
+        <span>${label}</span>
         <input
+          class="kb-text-input"
           data-sync-field="${key}"
           type="${password ? "password" : "text"}"
           value="${escapeHtml(syncSettings[key] || "")}"
           placeholder="${escapeHtml(placeholder)}"
           autocomplete="off"
-          style="width:100%;box-sizing:border-box;border:0;border-radius:12px;background:rgba(255,255,255,.72);padding:11px 12px;font:inherit;color:var(--kb-text-primary);box-shadow:inset 0 0 0 1px rgba(80,100,130,.12)"
         />
       </label>
     `;
