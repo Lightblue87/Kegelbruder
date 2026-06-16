@@ -1,4 +1,4 @@
-import { vm } from "./state.js";
+import { createVm } from "./state.js";
 import { DB } from "./db.js";
 import { renderSidebar, bindSidebar } from "./views/sidebar.js";
 import { renderReadyScreen, bindReadyScreen, renderGameSession, bindGameSession } from "./views/gameSession.js";
@@ -18,6 +18,7 @@ const detailEl = document.getElementById("detail");
 const sheetHost = document.getElementById("sheet-host");
 const sidebarToggle = document.getElementById("sidebar-toggle");
 
+let vm; // assigned once DB.init() resolves, see boot() at the bottom
 let lastDetailKey = undefined;
 
 function detailKey() {
@@ -155,10 +156,27 @@ function fullRender() {
   mountDetail();
 }
 
-vm.subscribe(fullRender);
+// ---------------------------------------------------------------- Boot
 
-applyTheme(DB.getSettings().theme || "system");
-fullRender();
+async function boot() {
+  try {
+    await DB.init(); // loads sql.js (WASM) + restores the SQLite blob from IndexedDB
+    vm = createVm();
+    vm.subscribe(fullRender);
+    applyTheme(DB.getSettings().theme || "system");
+    fullRender();
+  } catch (e) {
+    console.error("Start fehlgeschlagen:", e);
+    detailEl.innerHTML = `
+      <div class="u-empty" style="height:100%">
+        <div class="ico">⚠️</div>
+        <div style="font-size:18px;font-weight:600">App konnte nicht gestartet werden</div>
+        <div style="max-width:360px">${e?.message || e}</div>
+      </div>
+    `;
+  }
+}
+boot();
 
 // ---------------------------------------------------------------- Service worker registration
 

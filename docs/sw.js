@@ -1,12 +1,14 @@
 // Kegel Brüder PWA — offline cache. Bump CACHE_NAME on any deploy that
 // changes a cached file so clients pick up the new version.
-const CACHE_NAME = "kegelbrueder-v2";
+const CACHE_NAME = "kegelbrueder-v3";
 
 const PRECACHE_URLS = [
   "./",
   "./index.html",
   "./manifest.webmanifest",
   "./css/style.css",
+  "./vendor/sql-js/sql-wasm.js",
+  "./vendor/sql-js/sql-wasm.wasm",
   "./js/main.js",
   "./js/format.js",
   "./js/db.js",
