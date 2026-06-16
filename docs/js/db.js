@@ -153,6 +153,12 @@ function persist() {
   }, 80);
 }
 
+async function persistNow() {
+  clearTimeout(saveTimer);
+  const bytes = sq.export();
+  await idbSave(bytes);
+}
+
 function queryAll(sql, params = []) {
   const stmt = sq.prepare(sql);
   stmt.bind(params);
@@ -235,11 +241,16 @@ function migrateLegacyJsonIfPresent() {
         }
       }
     });
-    console.info("Alte JSON-Daten (erste PWA-Version) wurden einmalig in die SQLite-Datenbank übernommen.");
+    persistNow()
+      .then(() => {
+        localStorage.removeItem(LEGACY_LOCALSTORAGE_KEY);
+        console.info("Alte JSON-Daten (erste PWA-Version) wurden einmalig in die SQLite-Datenbank übernommen.");
+      })
+      .catch((saveError) => {
+        console.warn("Migration gespeichert, aber IndexedDB-Sicherung ist fehlgeschlagen. Legacy-Daten bleiben erhalten:", saveError);
+      });
   } catch (e) {
-    console.warn("Migration der alten JSON-Daten fehlgeschlagen, wird ignoriert:", e);
-  } finally {
-    localStorage.removeItem(LEGACY_LOCALSTORAGE_KEY);
+    console.warn("Migration der alten JSON-Daten fehlgeschlagen. Legacy-Daten bleiben erhalten:", e);
   }
 }
 
@@ -247,6 +258,27 @@ async function openFresh(bytes) {
   sq = bytes ? new SQL.Database(new Uint8Array(bytes)) : new SQL.Database();
   sq.run(SCHEMA_SQL);
   ensureDefaultKasse();
+}
+
+function openValidated(bytes) {
+  const normalized = bytes ? new Uint8Array(bytes) : null;
+  if (normalized && normalized.length === 0) throw new Error("Datei ist leer.");
+  if (normalized) {
+    const magic = "SQLite format 3\0";
+    const header = String.fromCharCode(...normalized.slice(0, magic.length));
+    if (header !== magic) throw new Error("Datei ist keine SQLite-Datenbank.");
+  }
+  const next = normalized ? new SQL.Database(normalized) : new SQL.Database();
+  try {
+    next.run(SCHEMA_SQL);
+    for (const table of ["mitglieder", "kasse_einstellungen", "transaktionen"]) {
+      next.exec(`SELECT 1 FROM ${table} LIMIT 1`);
+    }
+    return next;
+  } catch (e) {
+    next.close();
+    throw e;
+  }
 }
 
 export const DB = {
@@ -452,9 +484,18 @@ export const DB = {
     return sq.export(); // Uint8Array — same binary format as kegelbruder.db
   },
   async importDb(bytes) {
-    sq.close();
-    await openFresh(bytes);
-    persist();
+    const next = openValidated(bytes);
+    const previous = sq;
+    sq = next;
+    ensureDefaultKasse();
+    try {
+      await persistNow();
+      previous.close();
+    } catch (e) {
+      sq.close();
+      sq = previous;
+      throw e;
+    }
   },
 
   resetAll() {

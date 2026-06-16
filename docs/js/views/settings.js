@@ -5,6 +5,7 @@
 import { escapeHtml, parseDecimal } from "../format.js";
 import { bindNumField } from "../numpad.js";
 import { DB } from "../db.js";
+import { SyncClient } from "../sync.js";
 
 export function mountSettings(el, vm, ctx) {
   const local = {};
@@ -24,7 +25,10 @@ export function mountSettings(el, vm, ctx) {
 
   let saved = false;
   let importMsg = null;
+  let syncMsg = null;
+  let syncBusy = false;
   const theme = DB.getSettings().theme || "system";
+  let syncSettings = SyncClient.getSettings();
 
   function render() {
     el.innerHTML = `
@@ -99,6 +103,33 @@ export function mountSettings(el, vm, ctx) {
           </div>
         </div>
 
+        <div class="kb-group" style="margin-top:28px">
+          <div class="kb-group-header">Synchronisation</div>
+          <div class="kb-group-body">
+            <div style="padding:14px 16px;display:grid;gap:12px">
+              ${syncInput("Sync-Endpunkt", "endpoint", "https://...workers.dev")}
+              ${syncInput("Club-ID", "clubId", "kegelbrueder")}
+              ${syncInput("Sync-Schlüssel", "syncKey", "Gemeinsamer Schlüssel", true)}
+              ${syncInput("Gerätename", "deviceName", "iPad Kegelbahn")}
+              <div style="font-size:12px;color:var(--kb-text-secondary)">
+                Letzte Revision: ${escapeHtml(syncSettings.lastRevision || "noch nicht synchronisiert")}
+                ${syncSettings.lastSyncAt ? `<br>Letzter Sync: ${escapeHtml(formatDateTime(syncSettings.lastSyncAt))}` : ""}
+              </div>
+            </div>
+            <div class="kb-row-divider"></div>
+            <div style="padding:12px 16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+              <button class="kb-btn" data-sync-act="status" ${syncBusy ? "disabled" : ""}>Status prüfen</button>
+              <button class="kb-btn" data-sync-act="download" ${syncBusy ? "disabled" : ""}>Remote laden</button>
+              <button class="kb-btn prominent" data-sync-act="upload" ${syncBusy ? "disabled" : ""}>Dieses Gerät hochladen</button>
+            </div>
+            ${syncMsg ? `<div class="kb-row-divider"></div><div style="padding:10px 16px;font-size:13px;color:${syncMsg.ok ? "var(--kb-success)" : "var(--kb-danger)"}">${escapeHtml(syncMsg.text)}</div>` : ""}
+            <div class="kb-row-divider"></div>
+            <div style="padding:10px 16px;font-size:12px;color:var(--kb-text-secondary)">
+              Offline bleibt dieses Gerät immer arbeitsfähig. Synchronisiert wird nur, wenn du eine Aktion startest und Internet verfügbar ist.
+            </div>
+          </div>
+        </div>
+
         <div style="text-align:center;font-size:12px;color:var(--kb-text-tertiary);margin-top:24px">
           Kegel Brüder · läuft offline als installierte Web-App auf diesem Gerät.
         </div>
@@ -117,6 +148,104 @@ export function mountSettings(el, vm, ctx) {
         </div>
       </div>
     `;
+  }
+
+  function syncInput(label, key, placeholder, password = false) {
+    return `
+      <label style="display:grid;gap:5px">
+        <span style="font-size:12px;color:var(--kb-text-secondary);font-weight:600">${label}</span>
+        <input
+          data-sync-field="${key}"
+          type="${password ? "password" : "text"}"
+          value="${escapeHtml(syncSettings[key] || "")}"
+          placeholder="${escapeHtml(placeholder)}"
+          autocomplete="off"
+          style="width:100%;box-sizing:border-box;border:0;border-radius:12px;background:rgba(255,255,255,.72);padding:11px 12px;font:inherit;color:var(--kb-text-primary);box-shadow:inset 0 0 0 1px rgba(80,100,130,.12)"
+        />
+      </label>
+    `;
+  }
+
+  function formatDateTime(iso) {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso;
+    return date.toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+  }
+
+  function readSyncSettings() {
+    const next = {};
+    el.querySelectorAll("[data-sync-field]").forEach((input) => {
+      next[input.dataset.syncField] = input.value;
+    });
+    syncSettings = SyncClient.saveSettings(next);
+    return syncSettings;
+  }
+
+  function setSyncMessage(ok, text) {
+    syncMsg = { ok, text };
+    syncSettings = SyncClient.getSettings();
+    render();
+  }
+
+  async function runSyncAction(action) {
+    readSyncSettings();
+    syncBusy = true;
+    syncMsg = null;
+    render();
+    try {
+      if (action === "status") {
+        const remote = await SyncClient.status();
+        const revision = remote.revision || "keine";
+        const source = remote.deviceName ? ` von ${remote.deviceName}` : "";
+        setSyncMessage(true, `Remote erreichbar. Revision: ${revision}${source}.`);
+      } else if (action === "upload") {
+        const remote = await SyncClient.upload(DB.exportDb());
+        setSyncMessage(true, `Hochgeladen. Neue Revision: ${remote.revision}.`);
+      } else if (action === "download") {
+        const proceed = () => {
+          runDownload().catch((e) => setSyncMessage(false, e.message || String(e)));
+        };
+        vm.alert = {
+          title: "Remote-Daten laden?",
+          message: "Die lokale Datenbank auf diesem Gerät wird durch den synchronisierten Stand ersetzt.",
+          buttons: [
+            { label: "Abbrechen", role: "cancel" },
+            { label: "Laden", role: "destructive", onClick: proceed },
+          ],
+        };
+        syncBusy = false;
+        render();
+        ctx.showAlert(vm.alert);
+      }
+    } catch (e) {
+      if (e.status === 409) {
+        setSyncMessage(false, "Remote ist neuer als dieses Gerät. Bitte erst Remote laden oder bewusst den richtigen Stand wählen.");
+      } else {
+        setSyncMessage(false, e.message || String(e));
+      }
+    } finally {
+      if (syncBusy) {
+        syncBusy = false;
+        render();
+      }
+    }
+  }
+
+  async function runDownload() {
+    syncBusy = true;
+    syncMsg = null;
+    render();
+    try {
+      const { bytes, remote } = await SyncClient.download();
+      await DB.importDb(bytes);
+      vm.laden();
+      ladenLocal();
+      ctx.refreshSidebar();
+      setSyncMessage(true, `Remote geladen. Revision: ${remote.revision}.`);
+    } finally {
+      syncBusy = false;
+      render();
+    }
   }
 
   function attach() {
@@ -211,6 +340,17 @@ export function mountSettings(el, vm, ctx) {
         ],
       };
       ctx.showAlert(vm.alert);
+    });
+
+    el.querySelectorAll("[data-sync-field]").forEach((input) => {
+      input.addEventListener("change", () => {
+        readSyncSettings();
+        syncSettings = SyncClient.getSettings();
+      });
+    });
+
+    el.querySelectorAll("[data-sync-act]").forEach((btn) => {
+      btn.addEventListener("click", () => runSyncAction(btn.dataset.syncAct));
     });
   }
 
