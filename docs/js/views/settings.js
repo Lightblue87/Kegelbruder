@@ -137,12 +137,17 @@ export function mountSettings(el, vm, ctx) {
 
     el.querySelector("[data-act='speichern']").addEventListener("click", () => {
       const k = { ...vm.kasse };
-      k.Startgeld = parseDecimal(local.startgeld) || k.Startgeld;
-      k.Strafe_Stamm = parseDecimal(local.strafeStamm) || k.Strafe_Stamm;
-      k.Bahngebuehr = parseDecimal(local.bahngebuehr) || k.Bahngebuehr;
-      k.Pumpe = parseDecimal(local.pumpe) || k.Pumpe;
-      k.Neuner = parseDecimal(local.neuner) || k.Neuner;
-      k.Kranz = parseDecimal(local.kranz) || k.Kranz;
+      // Explicit blank check instead of `|| fallback` — 0 is a valid fee/penalty
+      // value (e.g. disabling the Pumpe penalty) and must not be discarded.
+      const apply = (key, raw) => {
+        if (raw.trim() !== "") k[key] = parseDecimal(raw);
+      };
+      apply("Startgeld", local.startgeld);
+      apply("Strafe_Stamm", local.strafeStamm);
+      apply("Bahngebuehr", local.bahngebuehr);
+      apply("Pumpe", local.pumpe);
+      apply("Neuner", local.neuner);
+      apply("Kranz", local.kranz);
       vm.einstellungenSpeichern(k);
       saved = true;
       render();

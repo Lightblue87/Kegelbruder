@@ -1,7 +1,8 @@
 // AttendanceView — port of AttendanceView.swift
 import { escapeHtml, money, parseDecimal } from "../format.js";
-import { pill } from "../components.js";
+import { pill, alertHostRender } from "../components.js";
 import { bindNumField } from "../numpad.js";
+import { namesEqual } from "../state.js";
 
 export function mountAttendance(card, vm, ctx) {
   const local = {
@@ -248,6 +249,18 @@ export function mountAttendance(card, vm, ctx) {
       addBtn.addEventListener("click", () => {
         const n = local.neuerGastName.trim();
         if (!n) return;
+        // A guest must not share a name with an existing member — spielStarten()
+        // would otherwise either downgrade a Stamm-Mitglied or merge into the
+        // wrong record.
+        if (Object.keys(vm.mitglieder).some((m) => namesEqual(m, n)) || local.neueGäste.some((g) => namesEqual(g.name, n))) {
+          vm.alert = {
+            title: "Name bereits vergeben",
+            message: `„${n}" ist bereits als Mitglied oder Gast angelegt. Bitte einen anderen Namen verwenden.`,
+            buttons: [{ label: "OK", role: "cancel" }],
+          };
+          alertHostRender(vm.alert);
+          return;
+        }
         local.neueGäste.push({ id: String(Math.random()), name: n, selected: true, zahlung: vm.kasse.Startgeld.toFixed(2).replace(".", ",") });
         local.neuerGastName = "";
         render();

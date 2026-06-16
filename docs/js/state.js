@@ -214,8 +214,11 @@ class Store {
     const eindeutigeGäste = uniquePlayersByName(gäste);
 
     for (const gast of eindeutigeGäste) {
-      if (aktuelleMitglieder[gast.name]) {
-        aktuelleMitglieder[gast.name].typ = "Gast";
+      const existing = aktuelleMitglieder[gast.name];
+      if (existing) {
+        // Don't downgrade an existing Stamm-Mitglied to "Gast" just because a
+        // guest entry happens to share its name — keep the member record intact.
+        if (existing.typ !== "Stamm") existing.typ = "Gast";
       } else {
         aktuelleMitglieder[gast.name] = toPlayerData(gast);
       }
