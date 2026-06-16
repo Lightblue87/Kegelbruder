@@ -19,6 +19,7 @@ const IDB_NAME = "kegelbrueder-sqlite";
 const IDB_STORE = "files";
 const IDB_KEY = "kegelbruder.db";
 const LEGACY_LOCALSTORAGE_KEY = "kegelbruder_v1"; // from the first JSON-based PWA build
+const LEGACY_MIGRATION_DONE_KEY = "kegelbruder_v1_migrated";
 const UI_SETTINGS_KEY = "kegelbruder_pwa_ui_settings"; // PWA-only prefs, not part of the club schema
 
 const SCHEMA_SQL = `
@@ -153,6 +154,12 @@ function persist() {
   }, 80);
 }
 
+async function persistNow() {
+  clearTimeout(saveTimer);
+  const bytes = sq.export();
+  await idbSave(bytes);
+}
+
 function queryAll(sql, params = []) {
   const stmt = sq.prepare(sql);
   stmt.bind(params);
@@ -181,9 +188,23 @@ function withTransaction(block) {
 function migrateLegacyJsonIfPresent() {
   const raw = localStorage.getItem(LEGACY_LOCALSTORAGE_KEY);
   if (!raw) return;
+  if (localStorage.getItem(LEGACY_MIGRATION_DONE_KEY) === "1") {
+    localStorage.removeItem(LEGACY_LOCALSTORAGE_KEY);
+    return;
+  }
   try {
     const legacy = JSON.parse(raw);
     withTransaction(() => {
+      run("DELETE FROM historie_transaktionen");
+      run("DELETE FROM historie_spieler");
+      run("DELETE FROM historie");
+      run("DELETE FROM aktuelles_spiel_meta");
+      run("DELETE FROM aktuelles_spiel_spieler");
+      run("DELETE FROM transaktionen");
+      run("DELETE FROM mitglieder");
+      run("DELETE FROM kasse_einstellungen");
+      ensureDefaultKasse();
+
       for (const [name, d] of Object.entries(legacy.mitglieder || {})) {
         run("INSERT OR REPLACE INTO mitglieder (name, typ, offene_zahlung) VALUES (?, ?, ?)", [name, d.typ, d.offene_zahlung || 0]);
       }
@@ -235,11 +256,17 @@ function migrateLegacyJsonIfPresent() {
         }
       }
     });
-    console.info("Alte JSON-Daten (erste PWA-Version) wurden einmalig in die SQLite-Datenbank übernommen.");
+    persistNow()
+      .then(() => {
+        localStorage.setItem(LEGACY_MIGRATION_DONE_KEY, "1");
+        localStorage.removeItem(LEGACY_LOCALSTORAGE_KEY);
+        console.info("Alte JSON-Daten (erste PWA-Version) wurden einmalig in die SQLite-Datenbank übernommen.");
+      })
+      .catch((saveError) => {
+        console.warn("Migration gespeichert, aber IndexedDB-Sicherung ist fehlgeschlagen. Legacy-Daten bleiben erhalten:", saveError);
+      });
   } catch (e) {
-    console.warn("Migration der alten JSON-Daten fehlgeschlagen, wird ignoriert:", e);
-  } finally {
-    localStorage.removeItem(LEGACY_LOCALSTORAGE_KEY);
+    console.warn("Migration der alten JSON-Daten fehlgeschlagen. Legacy-Daten bleiben erhalten:", e);
   }
 }
 
@@ -247,6 +274,27 @@ async function openFresh(bytes) {
   sq = bytes ? new SQL.Database(new Uint8Array(bytes)) : new SQL.Database();
   sq.run(SCHEMA_SQL);
   ensureDefaultKasse();
+}
+
+function openValidated(bytes) {
+  const normalized = bytes ? new Uint8Array(bytes) : null;
+  if (normalized && normalized.length === 0) throw new Error("Datei ist leer.");
+  if (normalized) {
+    const magic = "SQLite format 3\0";
+    const header = String.fromCharCode(...normalized.slice(0, magic.length));
+    if (header !== magic) throw new Error("Datei ist keine SQLite-Datenbank.");
+  }
+  const next = normalized ? new SQL.Database(normalized) : new SQL.Database();
+  try {
+    next.run(SCHEMA_SQL);
+    for (const table of ["mitglieder", "kasse_einstellungen", "transaktionen"]) {
+      next.exec(`SELECT 1 FROM ${table} LIMIT 1`);
+    }
+    return next;
+  } catch (e) {
+    next.close();
+    throw e;
+  }
 }
 
 export const DB = {
@@ -452,9 +500,18 @@ export const DB = {
     return sq.export(); // Uint8Array — same binary format as kegelbruder.db
   },
   async importDb(bytes) {
-    sq.close();
-    await openFresh(bytes);
-    persist();
+    const next = openValidated(bytes);
+    const previous = sq;
+    sq = next;
+    ensureDefaultKasse();
+    try {
+      await persistNow();
+      previous.close();
+    } catch (e) {
+      sq.close();
+      sq = previous;
+      throw e;
+    }
   },
 
   resetAll() {
