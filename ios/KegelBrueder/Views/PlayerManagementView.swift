@@ -157,7 +157,7 @@ struct PlayerEditSheet: View {
         guard !n.isEmpty else { error = "Name darf nicht leer sein."; return }
         let cleaned = schulden.replacingOccurrences(of: ",", with: ".")
         let s = Double(cleaned) ?? 0.0
-        onSave(n, typ, typ == "Gast" ? 0.0 : s)
+        onSave(n, typ, s)
         dismiss()
     }
 }
