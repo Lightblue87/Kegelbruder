@@ -40,6 +40,8 @@ extension Color {
     static let kbPrimaryDeep   = kb("#1b3a8f", "#6ea6ff")
 
     // Brass / winner gold
+    static let kbBrass200 = kb("#f1dca5", "#e7c26b")
+    static let kbBrass300 = kb("#e7c26b", "#d8a93e")
     static let kbBrass400 = kb("#d8a93e", "#e8b84f")
     static let kbBrass500 = kb("#c7922a", "#d8a93e")
     static let kbBrass600 = kb("#a6781f", "#c7922a")
@@ -197,12 +199,66 @@ extension Double {
     var kbMoney: String { String(format: "%.2f €", self) }
 }
 
+// MARK: - App background (gradient + ambient blobs, Liquid Glass backing)
+
+struct KBAppBackground: View {
+    @Environment(\.colorScheme) private var scheme
+
+    var body: some View {
+        GeometryReader { geo in
+            ZStack {
+                if scheme == .dark {
+                    LinearGradient(
+                        colors: [Color(hex: "#0d1117"), Color(hex: "#0b0f1a"), Color(hex: "#0e1320")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                } else {
+                    LinearGradient(
+                        colors: [Color(hex: "#eef3fb"), Color(hex: "#dbe4f1")],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
+                // Blue ambient blob – upper left
+                Circle()
+                    .fill(Color.kbPrimary.opacity(scheme == .dark ? 0.22 : 0.28))
+                    .frame(width: 520, height: 520)
+                    .blur(radius: 90)
+                    .position(x: geo.size.width * 0.25, y: -60)
+                // Brass ambient blob – lower right
+                Circle()
+                    .fill(Color.kbBrass400.opacity(scheme == .dark ? 0.16 : 0.20))
+                    .frame(width: 460, height: 460)
+                    .blur(radius: 90)
+                    .position(x: geo.size.width * 0.85, y: geo.size.height + 80)
+            }
+        }
+        .ignoresSafeArea()
+    }
+}
+
 // MARK: - Page background
 
 struct KBPageBackground: View {
     var body: some View {
-        Color(UIColor.systemGroupedBackground)
-            .ignoresSafeArea()
+        KBAppBackground()
+    }
+}
+
+// MARK: - Sidebar icon tile (colored rounded square, like iOS Settings)
+
+struct KBSidebarIcon: View {
+    let systemName: String
+    let tint: Color
+
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundColor(.white)
+            .frame(width: 29, height: 29)
+            .background(tint)
+            .cornerRadius(7)
     }
 }
 
@@ -222,7 +278,7 @@ struct KBScreen<Content: View>: View {
             .frame(maxWidth: maxWidth)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
+        .background(KBAppBackground())
     }
 }
 

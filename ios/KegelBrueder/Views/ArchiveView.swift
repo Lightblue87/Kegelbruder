@@ -41,6 +41,9 @@ struct ArchiveView: View {
                     }
                 }
             }
+            .listStyle(.insetGrouped)
+            .scrollContentBackground(.hidden)
+            .background(KBAppBackground())
             .navigationTitle("Archiv")
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
@@ -54,9 +57,16 @@ struct ArchiveView: View {
             if let entry = selected {
                 ArchiveDetailView(entry: entry)
             } else {
-                Text("Spieltag auswählen")
-                    .foregroundColor(.secondary)
-                    .font(.title2)
+                VStack(spacing: 14) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 44))
+                        .foregroundColor(.kbTextSecondary)
+                    Text("Spieltag auswählen")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.kbTextSecondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(KBAppBackground())
             }
         }
     }
@@ -99,7 +109,7 @@ struct ArchiveDetailView: View {
                     }
                     .padding(.horizontal)
                     .padding(.vertical, 6)
-                    .background(Color(.systemGroupedBackground))
+                    .background(.regularMaterial)
 
                     Divider()
 
@@ -169,6 +179,7 @@ struct ArchiveDetailView: View {
             }
             .padding(.vertical)
         }
+        .background(KBAppBackground())
         .navigationTitle("Spieltag Details")
         .navigationBarTitleDisplayMode(.inline)
     }

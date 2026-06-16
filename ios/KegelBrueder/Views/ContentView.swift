@@ -13,55 +13,88 @@ struct ContentView: View {
                 Section("Spiel") {
                     if vm.gameRunning {
                         NavigationLink(value: "game") {
-                            Label("Laufendes Spiel", systemImage: "figure.bowling")
+                            Label {
+                                Text("Laufendes Spiel")
+                            } icon: {
+                                KBSidebarIcon(systemName: "circle.dotted", tint: .kbPrimary)
+                            }
                         }
 
-                        Button(role: .destructive) {
+                        Button {
                             vm.abrechnungStarten()
                         } label: {
-                            Label("Abrechnung", systemImage: "eurosign.circle")
+                            Label {
+                                Text("Abrechnung")
+                            } icon: {
+                                KBSidebarIcon(systemName: "eurosign.circle", tint: .kbSuccess)
+                            }
                         }
 
                         Button(role: .destructive) {
                             showAbbruchWarnung = true
                         } label: {
-                            Label("Spiel abbrechen", systemImage: "xmark.circle")
+                            Label {
+                                Text("Spiel abbrechen")
+                                    .foregroundColor(.kbDanger)
+                            } icon: {
+                                KBSidebarIcon(systemName: "xmark.circle", tint: .kbDanger)
+                            }
                         }
-                        .foregroundColor(.red)
                     } else {
                         Button {
                             vm.starteNeuesSpiel()
                         } label: {
-                            Label("Neues Spiel", systemImage: "play.circle.fill")
-                                .foregroundColor(.kbPrimary)
-                                .font(.headline)
+                            Label {
+                                Text("Neues Spiel")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.kbPrimary)
+                            } icon: {
+                                KBSidebarIcon(systemName: "play.circle.fill", tint: .kbPrimary)
+                            }
                         }
                     }
                 }
 
                 Section("Verwaltung") {
                     NavigationLink(value: "cash") {
-                        Label("Kassenverwaltung", systemImage: "banknote")
+                        Label {
+                            Text("Kassenverwaltung")
+                        } icon: {
+                            KBSidebarIcon(systemName: "banknote", tint: .kbSuccess)
+                        }
                     }
                     NavigationLink(value: "players") {
-                        Label("Spieler verwalten", systemImage: "person.2")
+                        Label {
+                            Text("Spieler verwalten")
+                        } icon: {
+                            KBSidebarIcon(systemName: "person.2", tint: .kbNeuner)
+                        }
                     }
                     NavigationLink(value: "archive") {
-                        Label("Archiv", systemImage: "clock.arrow.circlepath")
+                        Label {
+                            Text("Archiv")
+                        } icon: {
+                            KBSidebarIcon(systemName: "clock.arrow.circlepath", tint: Color(.systemGray))
+                        }
                     }
-                }
-
-                Section("Einstellungen") {
                     NavigationLink(value: "settings") {
-                        Label("Einstellungen", systemImage: "gearshape")
+                        Label {
+                            Text("Einstellungen")
+                        } icon: {
+                            KBSidebarIcon(systemName: "gearshape", tint: Color(.systemGray2))
+                        }
                     }
                 }
             }
             .navigationTitle("Kegel Brüder")
-            .listStyle(.insetGrouped)
+            .listStyle(.sidebar)
+            .scrollContentBackground(.hidden)
+            .background(.ultraThinMaterial)
         } detail: {
             detailView
+                .background(KBAppBackground())
         }
+        .background(KBAppBackground())
         .sheet(item: $vm.activeSheet) { sheet in
             sheetView(for: sheet)
         }

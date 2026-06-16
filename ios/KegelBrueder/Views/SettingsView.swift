@@ -21,6 +21,7 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            // (Form keeps native grouped appearance for iOS settings UX)
             Group {
                 Section {
                     // ── Step 1: Paste the iCloud share link ──────────────────
@@ -67,12 +68,11 @@ struct SettingsView: View {
 
                     // ── Status after folder is selected ──────────────────────
                     if store.iCloudAvailable {
-                        HStack(spacing: 10) {
-                            Image(systemName: store.writeAccessOK
-                                  ? "checkmark.shield.fill"
-                                  : "xmark.shield.fill")
-                                .foregroundColor(store.writeAccessOK ? .kbSuccess : .kbDanger)
-                                .font(.title3)
+                        HStack(spacing: 12) {
+                            KBSidebarIcon(
+                                systemName: store.writeAccessOK ? "checkmark.shield.fill" : "xmark.shield.fill",
+                                tint: store.writeAccessOK ? .kbSuccess : .kbDanger
+                            )
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(store.folderName)
                                     .font(.subheadline.bold())
@@ -86,8 +86,10 @@ struct SettingsView: View {
                             Button {
                                 Task { await sync.downloadAll(); vm.laden() }
                             } label: {
-                                Image(systemName: "arrow.clockwise")
+                                Label("Jetzt sync", systemImage: "arrow.clockwise")
+                                    .font(.system(size: 14, weight: .semibold))
                             }
+                            .buttonStyle(KBGlassButton())
                             .disabled(sync.status.isLoading || !store.writeAccessOK)
                         }
                         .padding(.vertical, 2)
@@ -132,12 +134,17 @@ struct SettingsView: View {
                     Button("Speichern") { speichern() }
                         .frame(maxWidth: .infinity)
                         .buttonStyle(.borderedProminent)
+                        .tint(.kbPrimary)
 
                     if saved {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                            Text("Gespeichert!").foregroundColor(.green)
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.kbSuccess)
+                            Text("Gespeichert ✓")
+                                .foregroundColor(.kbSuccess)
+                                .fontWeight(.semibold)
                         }
+                        .frame(maxWidth: .infinity, alignment: .center)
                     }
                 }
             }

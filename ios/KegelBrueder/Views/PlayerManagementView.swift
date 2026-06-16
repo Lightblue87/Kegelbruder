@@ -13,10 +13,10 @@ struct PlayerManagementView: View {
     var body: some View {
         List {
             ForEach(sortedPlayers, id: \.0) { name, data in
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
                         HStack(spacing: 8) {
-                            Text(name).font(.headline)
+                            Text(name).font(.system(size: 17, weight: .semibold))
                             KBPill(data.typ, tone: data.typ == "Stamm" ? .primary : .guest)
                         }
                         if data.offene_zahlung > 0 {
@@ -29,22 +29,28 @@ struct PlayerManagementView: View {
                     Button {
                         editingPlayer = (name: name, data: data)
                     } label: {
-                        Image(systemName: "pencil.circle")
-                            .foregroundColor(.accentColor)
+                        Image(systemName: "pencil")
+                            .font(.system(size: 16))
+                            .foregroundColor(.kbPrimary)
                     }
                     .buttonStyle(.plain)
                 }
+                .padding(.vertical, 2)
             }
             .onDelete { idx in
                 let names = sortedPlayers.map { $0.0 }
                 idx.forEach { vm.spielerLöschen(name: names[$0]) }
             }
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(KBAppBackground())
         .navigationTitle("Spieler verwalten")
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { showAddSheet = true } label: {
                     Image(systemName: "plus")
+                        .font(.system(size: 16, weight: .semibold))
                 }
             }
         }

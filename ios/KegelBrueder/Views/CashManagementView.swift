@@ -11,10 +11,17 @@ struct CashManagementView: View {
     @State private var istKonto: Bool = false
     @State private var errorMessage: String? = nil
 
-    // Transfer section
     @State private var transferBetrag: String = ""
     @State private var transferBarZuKonto: Bool = true
     @State private var transferError: String? = nil
+
+    // Transaction date filter
+    @State private var vonMonat: Int = 0
+    @State private var vonJahr: Int = 0
+    @State private var bisMonat: Int = 0
+    @State private var bisJahr: Int = 0
+
+    private let monate = ["Jan","Feb","Mär","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez"]
 
     var stammMitNamen: [(name: String, schuld: Double)] {
         vm.mitglieder
@@ -23,133 +30,247 @@ struct CashManagementView: View {
             .sorted { $0.name < $1.name }
     }
 
+    private var txJahre: [Int] {
+        Array(Set(vm.kasse.Transaktionen.compactMap { parseDatum($0)?.year })).sorted()
+    }
+
+    private var gefilterteTx: [String] {
+        Array(vm.kasse.Transaktionen.suffix(200).reversed()).filter { tx in
+            guard let d = parseDatum(tx) else { return true }
+            if vonMonat > 0 && vonJahr > 0 {
+                if d.year < vonJahr || (d.year == vonJahr && d.month < vonMonat) { return false }
+            }
+            if bisMonat > 0 && bisJahr > 0 {
+                if d.year > bisJahr || (d.year == bisJahr && d.month > bisMonat) { return false }
+            }
+            return true
+        }
+    }
+
+    private var filterAktiv: Bool {
+        (vonMonat > 0 && vonJahr > 0) || (bisMonat > 0 && bisJahr > 0)
+    }
+
     var body: some View {
-        Form {
-            // Kassenstand + Kontostand
-            Section {
+        KBScreen(maxWidth: 620) {
+            KBScreenTitle(title: "Kassenverwaltung")
+
+            // ── Dual balance card ──────────────────────────────────────
+            KBGroupBox {
                 HStack(spacing: 0) {
-                    kontoCard(label: "Kasse (Bar)", betrag: vm.kasse.Kassenstand, color: .kbSuccess)
-                    Divider()
-                    kontoCard(label: "Konto", betrag: vm.kasse.Kontostand, color: .kbPrimary)
+                    balanceCell(label: "Kasse (Bar)",
+                                betrag: vm.kasse.Kassenstand, color: .kbSuccess)
+                    Rectangle()
+                        .fill(Color(UIColor.separator))
+                        .frame(width: 0.5)
+                        .padding(.vertical, 12)
+                    balanceCell(label: "Konto",
+                                betrag: vm.kasse.Kontostand, color: .kbPrimary)
                 }
-                .listRowInsets(.init(top: 0, leading: 0, bottom: 0, trailing: 0))
             }
 
-            // Offene Zahlungen
+            // ── Offene Zahlungen ───────────────────────────────────────
             if !stammMitNamen.isEmpty {
-                Section("Offene Zahlungen") {
-                    ForEach(stammMitNamen, id: \.name) { item in
-                        HStack {
-                            Text(item.name)
-                            Spacer()
+                KBGroupBox(header: "Offene Zahlungen") {
+                    ForEach(Array(stammMitNamen.enumerated()), id: \.element.name) { i, item in
+                        KBRow {
+                            Text(item.name).font(.system(size: 17))
+                        } trailing: {
                             Text(String(format: "%.2f €", item.schuld))
+                                .font(.system(size: 17, weight: .semibold))
                                 .foregroundColor(.kbDanger)
-                                .fontWeight(.semibold)
                                 .monospacedDigit()
                         }
+                        if i < stammMitNamen.count - 1 { KBRowDivider() }
                     }
                 }
             }
 
-            // Buchung
-            Section("Buchung") {
-                Picker("Art", selection: $istEinzahlung) {
-                    Text("Einzahlung").tag(true)
-                    Text("Auszahlung").tag(false)
-                }
-                .pickerStyle(.segmented)
-
-                Picker("Konto", selection: $istKonto) {
-                    Text("Bar").tag(false)
-                    Text("Konto").tag(true)
-                }
-                .pickerStyle(.segmented)
-
-                HStack {
-                    Text("Betrag (€)")
-                    Spacer()
-                    DecimalInputField(text: $betrag)
-                        .frame(width: 100, height: 32)
-                }
-
-                if istEinzahlung {
-                    HStack {
-                        Text("Spende (€)")
-                            .foregroundColor(.secondary)
-                        Spacer()
-                        DecimalInputField(text: $spende)
-                            .frame(width: 100, height: 32)
+            // ── Buchung ────────────────────────────────────────────────
+            KBGroupBox(header: "Buchung") {
+                VStack(spacing: 0) {
+                    HStack(spacing: 8) {
+                        Picker("Art", selection: $istEinzahlung) {
+                            Text("Einzahlung").tag(true)
+                            Text("Auszahlung").tag(false)
+                        }
+                        .pickerStyle(.segmented)
+                        Picker("Ziel", selection: $istKonto) {
+                            Text("Bar").tag(false)
+                            Text("Konto").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        .frame(width: 140)
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    KBRowDivider()
 
-                    Picker("Spieler (optional)", selection: $gewählterSpieler) {
-                        Text("Kein Spieler").tag("")
-                        ForEach(stammMitNamen, id: \.name) { item in
-                            Text(item.name).tag(item.name)
+                    KBRow {
+                        Text("Betrag (€)").font(.system(size: 17))
+                    } trailing: {
+                        DecimalInputField(text: $betrag)
+                            .frame(width: 110, height: 32)
+                    }
+                    KBRowDivider()
+
+                    if istEinzahlung {
+                        KBRow {
+                            Text("Spende (€)")
+                                .font(.system(size: 17))
+                                .foregroundColor(.kbTextSecondary)
+                        } trailing: {
+                            DecimalInputField(text: $spende)
+                                .frame(width: 110, height: 32)
+                        }
+                        KBRowDivider()
+
+                        if !stammMitNamen.isEmpty {
+                            KBRow {
+                                Text("Spieler (optional)").font(.system(size: 17))
+                            } trailing: {
+                                Picker("Spieler", selection: $gewählterSpieler) {
+                                    Text("Keiner").tag("")
+                                    ForEach(stammMitNamen, id: \.name) { item in
+                                        Text(item.name).tag(item.name)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+                            }
+                            KBRowDivider()
                         }
                     }
-                }
 
-                TextField("Beschreibung", text: $beschreibung)
-
-                if let err = errorMessage {
-                    Text(err)
-                        .foregroundColor(.kbDanger)
-                        .font(.caption)
-                }
-
-                Button { buchen() } label: {
                     HStack {
-                        Image(systemName: istEinzahlung ? "plus.circle.fill" : "minus.circle.fill")
-                        Text(istEinzahlung ? "Einzahlen" : "Auszahlen")
+                        TextField("Beschreibung", text: $beschreibung)
+                            .font(.system(size: 17))
                     }
-                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+
+                    if let err = errorMessage {
+                        Text(err)
+                            .font(.system(size: 13))
+                            .foregroundColor(.kbDanger)
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 8)
+                    }
+
+                    KBRowDivider()
+
+                    Button { buchen() } label: {
+                        Label(
+                            istEinzahlung ? "Einzahlen" : "Auszahlen",
+                            systemImage: istEinzahlung ? "plus.circle.fill" : "minus.circle.fill"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(KBGlassButton(
+                        prominent: true,
+                        tint: istEinzahlung ? .kbSuccess : .kbDanger
+                    ))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(istEinzahlung ? .kbSuccess : .kbDanger)
             }
 
-            // Bar ↔ Konto Transfer
-            Section("Bar ↔ Konto") {
-                Picker("Richtung", selection: $transferBarZuKonto) {
-                    Text("Bar → Konto").tag(true)
-                    Text("Konto → Bar").tag(false)
-                }
-                .pickerStyle(.segmented)
-
-                HStack {
-                    Text("Betrag (€)")
-                    Spacer()
-                    DecimalInputField(text: $transferBetrag)
-                        .frame(width: 100, height: 32)
-                }
-
-                if let err = transferError {
-                    Text(err)
-                        .foregroundColor(.kbDanger)
-                        .font(.caption)
-                }
-
-                Button { umbuchen() } label: {
-                    HStack {
-                        Image(systemName: "arrow.left.arrow.right.circle.fill")
-                        Text(transferBarZuKonto ? "Bar → Konto" : "Konto → Bar")
+            // ── Bar ↔ Konto ────────────────────────────────────────────
+            KBGroupBox(header: "Bar ↔ Konto") {
+                VStack(spacing: 0) {
+                    Picker("Richtung", selection: $transferBarZuKonto) {
+                        Text("Bar → Konto").tag(true)
+                        Text("Konto → Bar").tag(false)
                     }
-                    .frame(maxWidth: .infinity)
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+                    KBRowDivider()
+
+                    KBRow {
+                        Text("Betrag (€)").font(.system(size: 17))
+                    } trailing: {
+                        DecimalInputField(text: $transferBetrag)
+                            .frame(width: 110, height: 32)
+                    }
+
+                    if let err = transferError {
+                        Text(err)
+                            .font(.system(size: 13))
+                            .foregroundColor(.kbDanger)
+                            .padding(.horizontal, 16)
+                            .padding(.top, 4)
+                    }
+
+                    KBRowDivider()
+
+                    Button { umbuchen() } label: {
+                        Label(
+                            transferBarZuKonto ? "Bar → Konto umbuchen" : "Konto → Bar umbuchen",
+                            systemImage: "arrow.left.arrow.right.circle.fill"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(KBGlassButton(prominent: true, tint: .kbPrimary))
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.kbPrimary)
             }
 
-            // Transaktionen
-            Section("Letzte Transaktionen") {
-                let transaktionen = vm.kasse.Transaktionen.suffix(50).reversed()
-                if transaktionen.isEmpty {
-                    Text("Keine Transaktionen")
-                        .foregroundColor(.kbTextSecondary)
-                        .italic()
-                } else {
-                    ForEach(Array(transaktionen.enumerated()), id: \.offset) { _, tx in
-                        TransactionRow(text: tx)
+            // ── Letzte Transaktionen ───────────────────────────────────
+            KBGroupBox(header: "Letzte Transaktionen") {
+                VStack(spacing: 0) {
+                    // Date filter bar
+                    HStack(spacing: 8) {
+                        Text("Von").font(.system(size: 13)).foregroundColor(.kbTextSecondary)
+                        txDatePicker(monat: $vonMonat, jahr: $vonJahr)
+                        Text("Bis").font(.system(size: 13)).foregroundColor(.kbTextSecondary)
+                        txDatePicker(monat: $bisMonat, jahr: $bisJahr)
+                        Spacer()
+                        if filterAktiv {
+                            Button {
+                                vonMonat = 0; vonJahr = 0
+                                bisMonat = 0; bisJahr = 0
+                            } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.kbTextSecondary)
+                                    .font(.system(size: 16))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        Text("\(gefilterteTx.count)/\(vm.kasse.Transaktionen.count)")
+                            .font(.system(size: 12))
+                            .foregroundColor(.kbTextTertiary)
+                            .monospacedDigit()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
+                    KBRowDivider()
+
+                    if gefilterteTx.isEmpty {
+                        Text(filterAktiv
+                             ? "Keine Transaktionen im gewählten Zeitraum."
+                             : "Keine Transaktionen")
+                            .font(.system(size: 13))
+                            .foregroundColor(.kbTextTertiary)
+                            .padding(16)
+                    } else {
+                        ForEach(Array(gefilterteTx.enumerated()), id: \.offset) { i, tx in
+                            HStack(spacing: 10) {
+                                let isNeg   = tx.contains("| -")
+                                let isKonto = tx.hasPrefix("[Konto]")
+                                let dot: Color = isNeg ? .kbDanger : (isKonto ? .kbPrimary : .kbSuccess)
+                                Circle()
+                                    .fill(dot)
+                                    .frame(width: 8, height: 8)
+                                    .shadow(color: dot.opacity(0.45), radius: 3)
+                                Text(tx)
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.primary)
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 10)
+                            if i < gefilterteTx.count - 1 { KBRowDivider() }
+                        }
                     }
                 }
             }
@@ -160,13 +281,13 @@ struct CashManagementView: View {
 
     // MARK: - Sub-views
 
-    private func kontoCard(label: String, betrag: Double, color: Color) -> some View {
+    private func balanceCell(label: String, betrag: Double, color: Color) -> some View {
         VStack(spacing: 4) {
             Text(label)
                 .font(.system(size: 12))
                 .foregroundColor(.kbTextSecondary)
             Text(String(format: "%.2f €", betrag))
-                .font(.system(size: 28, weight: .bold, design: .rounded))
+                .font(.system(size: 32, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundColor(betrag >= 0 ? color : .kbDanger)
         }
@@ -174,7 +295,42 @@ struct CashManagementView: View {
         .padding(.vertical, 16)
     }
 
-    // MARK: - Actions
+    @ViewBuilder
+    private func txDatePicker(monat: Binding<Int>, jahr: Binding<Int>) -> some View {
+        HStack(spacing: 2) {
+            Picker("Monat", selection: monat) {
+                Text("–").tag(0)
+                ForEach(1...12, id: \.self) { m in Text(monate[m-1]).tag(m) }
+            }
+            .pickerStyle(.menu)
+            .font(.system(size: 13))
+
+            if !txJahre.isEmpty {
+                Picker("Jahr", selection: jahr) {
+                    Text("–").tag(0)
+                    ForEach(txJahre, id: \.self) { y in Text(String(y)).tag(y) }
+                }
+                .pickerStyle(.menu)
+                .font(.system(size: 13))
+            }
+        }
+    }
+
+    // MARK: - Date parsing
+
+    private struct TxDate { let year: Int; let month: Int }
+
+    private func parseDatum(_ tx: String) -> TxDate? {
+        let s = tx.hasPrefix("[Konto] ") ? String(tx.dropFirst(8)) : tx
+        let parts = s.prefix(10).split(separator: ".")
+        guard parts.count == 3,
+              let d = Int(parts[0]), d > 0,
+              let m = Int(parts[1]),
+              let y = Int(parts[2]) else { return nil }
+        return TxDate(year: y, month: m)
+    }
+
+    // MARK: - Actions (logic unchanged)
 
     private func buchen() {
         UIApplication.shared.sendAction(
@@ -182,10 +338,8 @@ struct CashManagementView: View {
         )
         errorMessage = nil
 
-        let cleanedBetrag = betrag.replacingOccurrences(of: ",", with: ".")
-        let b = Double(cleanedBetrag) ?? 0.0
-        let cleanedSpende = spende.replacingOccurrences(of: ",", with: ".")
-        let sp = Double(cleanedSpende) ?? 0.0
+        let b  = parseDouble(betrag)
+        let sp = parseDouble(spende)
 
         guard b > 0 || sp > 0 else {
             errorMessage = "Bitte einen gültigen Betrag eingeben."
@@ -206,7 +360,8 @@ struct CashManagementView: View {
                 let spendeBesch = gewählterSpieler.isEmpty
                     ? "Spende"
                     : "Spende von \(gewählterSpieler)"
-                vm.einzahlen(betrag: sp, beschreibung: spendeBesch, spielerName: nil, konto: istKonto)
+                vm.einzahlen(betrag: sp, beschreibung: spendeBesch,
+                             spielerName: nil, konto: istKonto)
             }
         } else {
             guard b > 0 else {
@@ -221,10 +376,7 @@ struct CashManagementView: View {
             vm.auszahlen(betrag: b, beschreibung: bez, konto: istKonto)
         }
 
-        betrag = ""
-        spende = ""
-        beschreibung = ""
-        gewählterSpieler = ""
+        betrag = ""; spende = ""; beschreibung = ""; gewählterSpieler = ""
     }
 
     private func umbuchen() {
@@ -232,8 +384,8 @@ struct CashManagementView: View {
             #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil
         )
         transferError = nil
-        let cleaned = transferBetrag.replacingOccurrences(of: ",", with: ".")
-        guard let b = Double(cleaned), b > 0 else {
+        let b = parseDouble(transferBetrag)
+        guard b > 0 else {
             transferError = "Bitte einen gültigen Betrag eingeben."
             return
         }
@@ -242,14 +394,17 @@ struct CashManagementView: View {
             transferError = "Betrag übersteigt den \(transferBarZuKonto ? "Kassenstand" : "Kontostand")."
             return
         }
-        if transferBarZuKonto {
-            vm.umbuchenBarZuKonto(betrag: b)
-        } else {
-            vm.umbuchenKontoZuBar(betrag: b)
-        }
+        if transferBarZuKonto { vm.umbuchenBarZuKonto(betrag: b) }
+        else                  { vm.umbuchenKontoZuBar(betrag: b) }
         transferBetrag = ""
     }
+
+    private func parseDouble(_ str: String) -> Double {
+        Double(str.replacingOccurrences(of: ",", with: ".")) ?? 0.0
+    }
 }
+
+// MARK: - Transaction row (kept for reuse if needed)
 
 struct TransactionRow: View {
     let text: String

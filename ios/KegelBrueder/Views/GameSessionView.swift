@@ -11,20 +11,22 @@ struct GameSessionView: View {
         VStack(spacing: 0) {
             headerBar
             Divider()
-            ScrollView(.horizontal, showsIndicators: false) {
-                ScrollView(.vertical, showsIndicators: true) {
-                    VStack(spacing: 0) {
-                        columnHeader
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(spacing: 0) {
+                    columnHeader
+                    Divider()
+                    ForEach($vm.players) { $player in
+                        PlayerRowView(player: $player, isWinner: player.name == winnerName)
+                            .environmentObject(vm)
                         Divider()
-                        ForEach($vm.players) { $player in
-                            PlayerRowView(player: $player, isWinner: player.name == winnerName)
-                                .environmentObject(vm)
-                            Divider()
-                        }
                     }
                 }
-                .padding(.horizontal)
+                // Tabelle wächst bis 960 px und zentriert sich — verhindert,
+                // dass die Spieler-Spalte bei eingeklappter Sidebar ins Unendliche wächst
+                .frame(maxWidth: 960)
+                .frame(maxWidth: .infinity)
             }
+            .padding(.horizontal, 18)
         }
         .navigationTitle("Spielstand")
         .navigationBarTitleDisplayMode(.inline)
@@ -55,27 +57,28 @@ struct GameSessionView: View {
     private var columnHeader: some View {
         HStack(spacing: 0) {
             Text("Spieler")
-                .frame(width: 130, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 4)
             Text("Pump")
-                .frame(width: 80, alignment: .center)
+                .frame(width: 88, alignment: .center)
                 .foregroundColor(.kbPumpe)
             Text("9er")
-                .frame(width: 80, alignment: .center)
+                .frame(width: 88, alignment: .center)
                 .foregroundColor(.kbNeuner)
             Text("Kranz")
-                .frame(width: 80, alignment: .center)
+                .frame(width: 88, alignment: .center)
                 .foregroundColor(.kbKranz)
             ForEach(0..<4, id: \.self) { i in
                 Text("Rd \(i+1)")
-                    .frame(width: 70, alignment: .center)
+                    .frame(width: 68, alignment: .center)
             }
             Text("Summe")
-                .frame(width: 70, alignment: .center)
+                .frame(width: 72, alignment: .center)
         }
         .font(.system(size: 12, weight: .bold))
         .foregroundColor(.kbTextSecondary)
         .padding(.vertical, 8)
-        .background(Color(UIColor.systemGroupedBackground))
+        .background(.regularMaterial)
     }
 }
 
@@ -107,25 +110,26 @@ struct PlayerRowView: View {
                         .foregroundColor(.kbDanger)
                 }
             }
-            .frame(width: 130, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 4)
 
             // Pumpen
             CounterCell(value: $player.pumpen, color: .kbPumpe) { delta in
                 vm.updatePumpen(playerName: player.name, delta: delta)
             }
-            .frame(width: 80)
+            .frame(width: 88)
 
             // Neuner
             CounterCell(value: $player.neuner, color: .kbNeuner) { delta in
                 vm.updateNeuner(playerName: player.name, delta: delta)
             }
-            .frame(width: 80)
+            .frame(width: 88)
 
             // Kranz
             CounterCell(value: $player.kranz, color: .kbKranz) { delta in
                 vm.updateKranz(playerName: player.name, delta: delta)
             }
-            .frame(width: 80)
+            .frame(width: 88)
 
             // Rundenfelder
             ForEach(0..<4, id: \.self) { runde in
@@ -138,12 +142,12 @@ struct PlayerRowView: View {
                         }
                     )
                 )
-                .frame(width: 70)
+                .frame(width: 68)
             }
 
             // Summe
             Text("\(player.summe)")
-                .frame(width: 70, alignment: .center)
+                .frame(width: 72, alignment: .center)
                 .font(.system(size: 17, weight: .bold))
                 .monospacedDigit()
                 .foregroundColor(isWinner ? .kbBrass500 : .primary)

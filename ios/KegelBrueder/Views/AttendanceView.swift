@@ -38,7 +38,7 @@ struct AttendanceView: View {
                 // Right: always-visible overview panel (no scrolling needed)
                 übersichtPanel
                     .frame(width: 280)
-                    .background(Color(UIColor.systemGroupedBackground))
+                    .background(.regularMaterial)
             }
             .navigationTitle("Anwesenheit")
             .navigationBarTitleDisplayMode(.inline)
@@ -225,7 +225,7 @@ struct AttendanceView: View {
                         value: String(format: "%.2f €", vm.kasse.Strafe_Stamm)
                     )
                 }
-                .background(Color(UIColor.secondarySystemGroupedBackground))
+                .background(Color(UIColor.secondarySystemGroupedBackground).opacity(0.85))
                 .cornerRadius(12)
                 .padding(.horizontal, 16)
 
@@ -286,7 +286,7 @@ struct AttendanceView: View {
                             }
                         }
                     }
-                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .background(Color(UIColor.secondarySystemGroupedBackground).opacity(0.85))
                     .cornerRadius(12)
                     .padding(.horizontal, 16)
                 }
