@@ -142,7 +142,7 @@ export function mountPlayerManagement(el, vm, ctx) {
           return;
         }
         const s = parseDecimal(state.schulden);
-        onSave(n, state.typ, state.typ === "Gast" ? 0 : s);
+        onSave(n, state.typ, s);
         host.remove();
       });
     }
