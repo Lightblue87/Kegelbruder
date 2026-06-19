@@ -152,7 +152,7 @@ class Store {
 
   // ---------------------------------------------------------------- Attendance
 
-  berechneStartgebuehren(anwesend, zahlungen) {
+  berechneStartgebuehren(anwesend, zahlungen, zahlungsarten = {}) {
     this.preSessionSchulden = {};
     const aktuelleMitglieder = clone(DB.ladeMitglieder());
 
@@ -171,9 +171,12 @@ class Store {
       const pd = aktuelleMitglieder[name];
       if (!pd) continue;
       const datum = formatDatum();
-      const beschreibung = betrag >= pd.offene_zahlung ? `Zahlung von ${name}` : `Teilzahlung von ${name}`;
+      const perKarte = !!zahlungsarten[name];
+      const beschreibung = betrag >= pd.offene_zahlung ? `Zahlung von ${name}${perKarte ? " (Karte)" : ""}` : `Teilzahlung von ${name}${perKarte ? " (Karte)" : ""}`;
       pd.offene_zahlung = Math.max(0, round2(pd.offene_zahlung - betrag));
-      const text = this._addEinzahlung(betrag, beschreibung, datum);
+      const text = perKarte
+        ? this._addEinzahlungKonto(betrag, beschreibung, datum)
+        : this._addEinzahlung(betrag, beschreibung, datum);
       this.sessionTx.push({ kind: "einzahlung", betrag, text });
     }
 
