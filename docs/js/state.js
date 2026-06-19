@@ -172,12 +172,25 @@ class Store {
       if (!pd) continue;
       const datum = formatDatum();
       const perKarte = !!zahlungsarten[name];
-      const beschreibung = betrag >= pd.offene_zahlung ? `Zahlung von ${name}${perKarte ? " (Karte)" : ""}` : `Teilzahlung von ${name}${perKarte ? " (Karte)" : ""}`;
-      pd.offene_zahlung = Math.max(0, round2(pd.offene_zahlung - betrag));
-      const text = perKarte
-        ? this._addEinzahlungKonto(betrag, beschreibung, datum)
-        : this._addEinzahlung(betrag, beschreibung, datum);
-      this.sessionTx.push({ kind: "einzahlung", betrag, text });
+
+      const zahlungAufSchuld = Math.min(round2(betrag), round2(pd.offene_zahlung));
+      if (zahlungAufSchuld > 0) {
+        pd.offene_zahlung = round2(Math.max(0, pd.offene_zahlung - zahlungAufSchuld));
+        const beschreibung = `Zahlung von ${name}${perKarte ? " (Karte)" : ""}`;
+        const text = perKarte
+          ? this._addEinzahlungKonto(zahlungAufSchuld, beschreibung, datum)
+          : this._addEinzahlung(zahlungAufSchuld, beschreibung, datum);
+        this.sessionTx.push({ kind: "einzahlung", betrag: zahlungAufSchuld, text });
+      }
+
+      const spende = round2(Math.max(0, round2(betrag) - zahlungAufSchuld));
+      if (spende > 0) {
+        const beschreibung = `Spende von ${name}${perKarte ? " (Karte)" : ""}`;
+        const text = perKarte
+          ? this._addEinzahlungKonto(spende, beschreibung, datum)
+          : this._addEinzahlung(spende, beschreibung, datum);
+        this.sessionTx.push({ kind: "einzahlung", betrag: spende, text });
+      }
     }
 
     DB.speichereMitglieder(aktuelleMitglieder);
