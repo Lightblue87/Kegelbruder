@@ -25,6 +25,7 @@ const UI_SETTINGS_KEY = "kegelbruder_pwa_ui_settings"; // PWA-only prefs, not pa
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS mitglieder (
     name TEXT PRIMARY KEY,
+    vollname TEXT NOT NULL DEFAULT '',
     typ TEXT NOT NULL DEFAULT 'Stamm',
     offene_zahlung REAL NOT NULL DEFAULT 0.0
 );
@@ -178,10 +179,15 @@ function ensureDefaultKasse() {
 }
 
 function applyMigrations() {
-  // v2: notiz column on historie (for databases created before this feature)
+  // v2: notiz column on historie
   const historieCols = (sq.exec("PRAGMA table_info(historie)")[0]?.values ?? []).map((r) => r[1]);
   if (!historieCols.includes("notiz")) {
     sq.run("ALTER TABLE historie ADD COLUMN notiz TEXT NOT NULL DEFAULT ''");
+  }
+  // v3: vollname column on mitglieder
+  const mitgliederCols = (sq.exec("PRAGMA table_info(mitglieder)")[0]?.values ?? []).map((r) => r[1]);
+  if (!mitgliederCols.includes("vollname")) {
+    sq.run("ALTER TABLE mitglieder ADD COLUMN vollname TEXT NOT NULL DEFAULT ''");
   }
   // Seed regeln if the table is empty (fresh DB or imported DB without rules)
   const hasRegeln = sq.exec("SELECT COUNT(*) FROM regeln")[0].values[0][0] > 0;
@@ -367,8 +373,9 @@ export const DB = {
   // ---- Mitglieder ----
   ladeMitglieder() {
     const result = {};
-    for (const row of queryAll("SELECT name, typ, offene_zahlung FROM mitglieder")) {
+    for (const row of queryAll("SELECT name, vollname, typ, offene_zahlung FROM mitglieder")) {
       result[row.name] = defaultPlayerData(row.typ);
+      result[row.name].vollname = row.vollname || "";
       result[row.name].offene_zahlung = row.offene_zahlung;
     }
     return result;
@@ -377,7 +384,7 @@ export const DB = {
     withTransaction(() => {
       run("DELETE FROM mitglieder");
       for (const [name, d] of Object.entries(players)) {
-        run("INSERT INTO mitglieder (name, typ, offene_zahlung) VALUES (?, ?, ?)", [name, d.typ, d.offene_zahlung]);
+        run("INSERT INTO mitglieder (name, vollname, typ, offene_zahlung) VALUES (?, ?, ?, ?)", [name, d.vollname || "", d.typ, d.offene_zahlung]);
       }
     });
     persist();

@@ -531,22 +531,24 @@ class Store {
 
   // ---------------------------------------------------------------- Player management
 
-  spielerHinzufügen(name, typ, offeneZahlung) {
+  spielerHinzufügen(name, typ, offeneZahlung, vollname = "") {
     const updated = clone(this._aktuelleMitgliederAusState());
     if (this._playerNameExists(name, updated)) return;
     const pd = defaultPlayerData(typ);
     pd.offene_zahlung = offeneZahlung;
+    pd.vollname = vollname;
     updated[name] = pd;
     this.mitglieder = updated;
     DB.speichereMitglieder(updated);
   }
 
-  spielerBearbeiten(alterName, neuerName, typ, offeneZahlung) {
+  spielerBearbeiten(alterName, neuerName, typ, offeneZahlung, vollname = "") {
     const updated = clone(this._aktuelleMitgliederAusState());
     if (!namesEqual(alterName, neuerName) && this._playerNameExists(neuerName, updated)) return;
     const pd = updated[alterName] || defaultPlayerData(typ);
     pd.typ = typ;
     pd.offene_zahlung = offeneZahlung;
+    pd.vollname = vollname;
     if (alterName !== neuerName) delete updated[alterName];
     updated[neuerName] = pd;
     this.mitglieder = updated;
