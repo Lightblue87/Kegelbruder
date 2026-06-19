@@ -216,10 +216,11 @@ html[data-theme="dark"] #app-bg::after { opacity: 0.16; }
 .sidebar-header .logo {
   width: 36px; height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--kb-primary), var(--kb-primary-deep));
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 700; font-size: 15px;
-  box-shadow: 0 6px 14px rgba(66,133,244,0.35);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.sidebar-header .logo img {
+  width: 100%; height: 100%; display: block;
 }
 .sidebar-header .title { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
 
@@ -503,7 +504,7 @@ select.kb-select {
   z-index: 2;
 }
 .game-row.winner { background: color-mix(in srgb, var(--kb-brass-400) 6%, transparent); }
-.col-name { flex: 1 1 auto; min-width: 100px; padding-left: 4px; display: flex; flex-direction: column; gap: 2px; }
+.col-name { flex: 1 1 auto; min-width: 100px; padding-left: 4px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .col-name .pname { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; }
 .col-cat { width: 88px; text-align: center; flex-shrink: 0; }
 .col-rd { width: 68px; text-align: center; flex-shrink: 0; }

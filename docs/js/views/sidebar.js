@@ -22,7 +22,7 @@ export function renderSidebar(vm) {
 
   return `
     <div class="sidebar-header">
-      <div class="logo">KB</div>
+      <div class="logo"><img src="./icons/icon.svg" alt="Kegel Brüder" /></div>
       <div class="title">Kegel Brüder</div>
     </div>
 
