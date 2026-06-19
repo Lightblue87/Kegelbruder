@@ -42,6 +42,9 @@ export function renderSidebar(vm) {
       <button class="sidebar-item ${vm.route === "archive" ? "selected" : ""}" data-act="nav" data-route="archive">
         ${sidebarIconTile("🕘", "#8e8e93")} Archiv
       </button>
+      <button class="sidebar-item ${vm.route === "rules" ? "selected" : ""}" data-act="nav" data-route="rules">
+        ${sidebarIconTile("§", "var(--kb-primary)")} Regelbuch
+      </button>
       <button class="sidebar-item ${vm.route === "settings" ? "selected" : ""}" data-act="nav" data-route="settings">
         ${sidebarIconTile("⚙", "#aeaeb2")} Einstellungen
       </button>

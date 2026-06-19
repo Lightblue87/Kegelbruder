@@ -6,6 +6,7 @@ import { mountCashManagement } from "./views/cashManagement.js";
 import { mountPlayerManagement } from "./views/playerManagement.js";
 import { mountArchive } from "./views/archive.js";
 import { mountSettings } from "./views/settings.js";
+import { mountRulebook } from "./views/rulebook.js";
 import { mountAttendance } from "./views/attendance.js";
 import { mountPlayerSort } from "./views/playerSort.js";
 import { mountBilling } from "./views/billing.js";
@@ -54,6 +55,8 @@ function mountDetail() {
     mountArchive(detailEl, vm, ctx);
   } else if (key === "settings") {
     mountSettings(detailEl, vm, ctx);
+  } else if (key === "rules") {
+    mountRulebook(detailEl);
   }
 }
 
