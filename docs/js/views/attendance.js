@@ -146,7 +146,7 @@ export function mountAttendance(card, vm, ctx) {
           ${statRow("✅", "var(--kb-success)", "Anwesend", String(anzahlAnwesend()))}
           ${statRow("❌", "var(--kb-danger)", "Abwesend", String(anzahlAbwesend()))}
           ${statRow("€", "var(--kb-primary)", "Startgeld/Spieler", money(vm.kasse.Startgeld))}
-          ${statRow("⚠", "var(--kb-warning)", "Strafe Abwesend", money(vm.kasse.Strafe_Stamm))}
+          ${statRow("⚠", "var(--kb-warning)", "Strafe Abwesend", money(anzahlAbwesend() * vm.kasse.Strafe_Stamm))}
         </div>
       `;
     }
@@ -160,7 +160,7 @@ export function mountAttendance(card, vm, ctx) {
         ${statRow("✅", "var(--kb-success)", "Anwesend", String(anzahlAnwesend()))}
         ${statRow("❌", "var(--kb-danger)", "Abwesend", String(anzahlAbwesend()))}
         ${statRow("€", "var(--kb-primary)", "Startgeld/Spieler", money(vm.kasse.Startgeld))}
-        ${statRow("⚠", "var(--kb-warning)", "Strafe Abwesend", money(vm.kasse.Strafe_Stamm))}
+        ${statRow("⚠", "var(--kb-warning)", "Strafe Abwesend", money(anzahlAbwesend() * vm.kasse.Strafe_Stamm))}
       </div>
       <div style="display:flex;justify-content:space-between;padding:16px 16px 0;font-size:14px">
         <span class="u-muted">Startgelder gesamt</span>
