@@ -1,6 +1,6 @@
 // Kegel Brüder PWA — offline cache. Bump CACHE_NAME on any deploy that
 // changes a cached file so clients pick up the new version.
-const CACHE_NAME = "kegelbrueder-v7";
+const CACHE_NAME = "kegelbrueder-v8";
 
 const PRECACHE_URLS = [
   "./",
@@ -28,6 +28,8 @@ const PRECACHE_URLS = [
   "./js/views/playerManagement.js",
   "./js/views/archive.js",
   "./js/views/settings.js",
+  "./icons/icon.svg",
+  "./icons/icon-maskable.svg",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
   "./icons/icon-maskable-192.png",

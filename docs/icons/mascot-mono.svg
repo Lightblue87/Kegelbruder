@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512"><defs>
+  <linearGradient id="kbG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4f93ff"></stop><stop offset="1" stop-color="#2451b0"></stop></linearGradient>
+  <linearGradient id="beer" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbb732"></stop><stop offset="1" stop-color="#ef8f12"></stop></linearGradient>
+</defs><g transform="translate(20,40)">
+    <path d="M214 300 q-6 40 -26 56" fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round"></path>
+    <path d="M262 300 q8 42 30 54" fill="none" stroke="#fff" stroke-width="18" stroke-linecap="round"></path>
+    <ellipse cx="182" cy="362" rx="20" ry="12" fill="#fff"></ellipse>
+    <ellipse cx="298" cy="360" rx="20" ry="12" fill="#fff"></ellipse>
+    <path d="M188 220 q-50 14 -70 -24" fill="none" stroke="#fff" stroke-width="17" stroke-linecap="round"></path>
+    <path d="M290 214 q46 0 60 -34" fill="none" stroke="#fff" stroke-width="17" stroke-linecap="round"></path>
+    <g transform="translate(96,196) scale(0.4)"><path d="M-12 52 C-16 90 -26 150 -40 210 C-44 232 -44 250 -34 258 C-22 266 22 266 34 258 C44 250 44 232 40 210 C26 150 16 90 12 52 Z" fill="#fff"></path><circle cx="0" cy="42" r="30" fill="#fff"></circle></g>
+    <g transform="translate(238,150)">
+      <path d="M50 22 q44 2 44 46 q0 44 -44 46" fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round"></path>
+      <rect x="-52" y="0" width="104" height="156" rx="18" fill="#fff"></rect>
+      
+      
+      <g fill="#fff"><rect x="-52" y="-14" width="104" height="28" rx="14"></rect><circle cx="-38" cy="-16" r="21"></circle><circle cx="-12" cy="-29" r="24"></circle><circle cx="16" cy="-22" r="22"></circle><circle cx="40" cy="-11" r="18"></circle></g>
+      <circle cx="-16" cy="62" r="14" fill="#2451b0"></circle><circle cx="20" cy="62" r="14" fill="#2451b0"></circle>
+      <circle cx="-12" cy="64" r="6.5" fill="#fff"></circle><circle cx="24" cy="64" r="6.5" fill="#fff"></circle>
+      <path d="M-20 92 q19 20 40 0" fill="none" stroke="#2451b0" stroke-width="6.5" stroke-linecap="round"></path>
+    </g>
+  </g></svg>
