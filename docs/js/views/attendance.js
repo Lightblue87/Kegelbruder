@@ -8,9 +8,11 @@ export function mountAttendance(card, vm, ctx) {
   const local = {
     anwesend: {}, // name -> bool (Stamm)
     zahlungen: {}, // name -> string
+    zahlungsarten: {}, // name -> bool (true = Karte)
     gastAnwesend: {}, // name -> bool (known Gäste)
     gastZahlungen: {},
-    neueGäste: [], // {id, name, selected, zahlung}
+    gastZahlungsarten: {}, // name -> bool (true = Karte)
+    neueGäste: [], // {id, name, selected, zahlung, perKarte}
     neuerGastName: "",
   };
 
@@ -73,7 +75,7 @@ export function mountAttendance(card, vm, ctx) {
             ${`<div class="kb-group-header">STAMM-MITGLIEDER</div>`}
             <div class="kb-group-body">
               ${stammMitglieder()
-                .map(([name, data], i, arr) => attendeeRow(name, data, local.anwesend[name], local.zahlungen[name], "stamm", i === arr.length - 1))
+                .map(([name, data], i, arr) => attendeeRow(name, data, local.anwesend[name], local.zahlungen[name], local.zahlungsarten[name], "stamm", i === arr.length - 1))
                 .join("")}
             </div>
           </div>
@@ -81,7 +83,7 @@ export function mountAttendance(card, vm, ctx) {
             ${`<div class="kb-group-header">GÄSTE</div>`}
             <div class="kb-group-body">
               ${gastMitglieder()
-                .map(([name, data]) => attendeeRow(name, data, local.gastAnwesend[name], local.gastZahlungen[name], "gast", false))
+                .map(([name, data]) => attendeeRow(name, data, local.gastAnwesend[name], local.gastZahlungen[name], local.gastZahlungsarten[name], "gast", false))
                 .join("")}
               ${local.neueGäste
                 .map(
@@ -95,7 +97,7 @@ export function mountAttendance(card, vm, ctx) {
                 </div>
                 ${
                   g.selected
-                    ? `<div class="kb-field-row"><span class="u-muted">Zahlung heute:</span>${numFieldHtml(`neugast-zahlung-${g.id}`, g.zahlung)}<span class="u-muted">€</span></div>`
+                    ? `<div class="kb-field-row"><span class="u-muted">Zahlung heute:</span>${numFieldHtml(`neugast-zahlung-${g.id}`, g.zahlung)}<span class="u-muted">€</span>${zahlungsartHtml(`neugast-art-${g.id}`, !!g.perKarte)}</div>`
                     : ""
                 }
                 <div class="kb-row-divider"></div>
@@ -117,7 +119,7 @@ export function mountAttendance(card, vm, ctx) {
     attach();
   }
 
-  function attendeeRow(name, data, isOn, zahlungVal, kind, isLastNoBorder) {
+  function attendeeRow(name, data, isOn, zahlungVal, perKarte, kind, isLastNoBorder) {
     return `
       <div class="kb-row">
         <div class="leading">
@@ -126,9 +128,16 @@ export function mountAttendance(card, vm, ctx) {
         </div>
         <div class="trailing">${toggleHtml(`${kind}-${escapeHtml(name)}`, !!isOn)}</div>
       </div>
-      ${isOn ? `<div class="kb-field-row"><span class="u-muted">Zahlung heute:</span>${numFieldHtml(`${kind}-zahlung-${escapeHtml(name)}`, zahlungVal || "")}<span class="u-muted">€</span></div>` : ""}
+      ${isOn ? `<div class="kb-field-row"><span class="u-muted">Zahlung heute:</span>${numFieldHtml(`${kind}-zahlung-${escapeHtml(name)}`, zahlungVal || "")}<span class="u-muted">€</span>${zahlungsartHtml(`${kind}-art-${escapeHtml(name)}`, !!perKarte)}</div>` : ""}
       <div class="kb-row-divider"></div>
     `;
+  }
+
+  function zahlungsartHtml(id, perKarte) {
+    return `<div class="kb-segmented" style="width:110px;margin-left:8px" data-zahlungsart="${id}">
+      <button class="${!perKarte ? "active" : ""}" data-val="false">Bar</button>
+      <button class="${perKarte ? "active" : ""}" data-val="true">Karte</button>
+    </div>`;
   }
 
   function toggleHtml(id, on) {
@@ -146,7 +155,7 @@ export function mountAttendance(card, vm, ctx) {
           ${statRow("✅", "var(--kb-success)", "Anwesend", String(anzahlAnwesend()))}
           ${statRow("❌", "var(--kb-danger)", "Abwesend", String(anzahlAbwesend()))}
           ${statRow("€", "var(--kb-primary)", "Startgeld/Spieler", money(vm.kasse.Startgeld))}
-          ${statRow("⚠", "var(--kb-warning)", "Strafe Abwesend", money(vm.kasse.Strafe_Stamm))}
+          ${statRow("⚠", "var(--kb-warning)", "Strafe Abwesend", money(anzahlAbwesend() * vm.kasse.Strafe_Stamm))}
         </div>
       `;
     }
@@ -160,7 +169,7 @@ export function mountAttendance(card, vm, ctx) {
         ${statRow("✅", "var(--kb-success)", "Anwesend", String(anzahlAnwesend()))}
         ${statRow("❌", "var(--kb-danger)", "Abwesend", String(anzahlAbwesend()))}
         ${statRow("€", "var(--kb-primary)", "Startgeld/Spieler", money(vm.kasse.Startgeld))}
-        ${statRow("⚠", "var(--kb-warning)", "Strafe Abwesend", money(vm.kasse.Strafe_Stamm))}
+        ${statRow("⚠", "var(--kb-warning)", "Strafe Abwesend", money(anzahlAbwesend() * vm.kasse.Strafe_Stamm))}
       </div>
       <div style="display:flex;justify-content:space-between;padding:16px 16px 0;font-size:14px">
         <span class="u-muted">Startgelder gesamt</span>
@@ -222,6 +231,22 @@ export function mountAttendance(card, vm, ctx) {
           }
         }
         render();
+      });
+    });
+
+    card.querySelectorAll("[data-zahlungsart]").forEach((seg) => {
+      seg.querySelectorAll("button").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const id = seg.dataset.zahlungsart;
+          const perKarte = btn.dataset.val === "true";
+          if (id.startsWith("stamm-art-")) local.zahlungsarten[id.slice(10)] = perKarte;
+          else if (id.startsWith("gast-art-")) local.gastZahlungsarten[id.slice(9)] = perKarte;
+          else if (id.startsWith("neugast-art-")) {
+            const g = local.neueGäste.find((x) => x.id === id.slice(12));
+            if (g) g.perKarte = perKarte;
+          }
+          render();
+        });
       });
     });
 
@@ -298,11 +323,12 @@ export function mountAttendance(card, vm, ctx) {
     for (const gast of local.neueGäste) if (gast.selected) allAnwesend[gast.name] = true;
 
     const parsedZahlungen = {};
-    for (const [name, str] of Object.entries(local.zahlungen)) if (local.anwesend[name]) parsedZahlungen[name] = parseDecimal(str);
-    for (const [name, str] of Object.entries(local.gastZahlungen)) if (local.gastAnwesend[name]) parsedZahlungen[name] = parseDecimal(str);
-    for (const gast of local.neueGäste) if (gast.selected) parsedZahlungen[gast.name] = parseDecimal(gast.zahlung);
+    const parsedZahlungsarten = {};
+    for (const [name, str] of Object.entries(local.zahlungen)) if (local.anwesend[name]) { parsedZahlungen[name] = parseDecimal(str); parsedZahlungsarten[name] = !!local.zahlungsarten[name]; }
+    for (const [name, str] of Object.entries(local.gastZahlungen)) if (local.gastAnwesend[name]) { parsedZahlungen[name] = parseDecimal(str); parsedZahlungsarten[name] = !!local.gastZahlungsarten[name]; }
+    for (const gast of local.neueGäste) if (gast.selected) { parsedZahlungen[gast.name] = parseDecimal(gast.zahlung); parsedZahlungsarten[gast.name] = !!gast.perKarte; }
 
-    vm.berechneStartgebuehren(allAnwesend, parsedZahlungen);
+    vm.berechneStartgebuehren(allAnwesend, parsedZahlungen, parsedZahlungsarten);
 
     // 3. Build player lists
     const anwesendeSpieler = stammMitglieder()
