@@ -6,6 +6,8 @@ import { DB } from "../db.js";
 export function mountArchive(el, vm, ctx) {
   let entries = [...DB.ladeHistorie()].reverse();
   let selected = null;
+  // Notiz edit state per spielId (unsaved edits survive re-render)
+  const notizDraft = {};
 
   function render() {
     el.innerHTML = `
@@ -25,7 +27,7 @@ export function mountArchive(el, vm, ctx) {
                 <div style="font-weight:700">${escapeHtml(entry.datum)}</div>
                 <div style="font-size:12px;${selected?.spielId === entry.spielId ? "color:rgba(255,255,255,0.85)" : "color:var(--kb-text-secondary)"};display:flex;justify-content:space-between;margin-top:2px">
                   <span>👥 ${Object.keys(entry.players).length} Spieler</span>
-                  <span>📋 ${entry.transaktionen.length} Buchungen</span>
+                  ${entry.notiz ? `<span>📝</span>` : `<span>📋 ${entry.transaktionen.length} Buchungen</span>`}
                 </div>
               </button>
             `
@@ -41,6 +43,17 @@ export function mountArchive(el, vm, ctx) {
     attach();
   }
 
+  function renderNotizText(text, players) {
+    if (!text.trim()) return "";
+    // Replace @Name with pill badges for known players
+    const escaped = escapeHtml(text);
+    return escaped.replace(/@(\S+)/g, (match, name) => {
+      const found = Object.keys(players).find((n) => n.toLowerCase() === name.toLowerCase());
+      if (found) return `<span class="kb-pill neutral" style="vertical-align:middle">@${escapeHtml(found)}</span>`;
+      return match;
+    });
+  }
+
   function detailHtml(entry) {
     const order = entry.spieler_reihenfolge || Object.keys(entry.players).sort();
     const players = order.filter((n) => entry.players[n]).map((n) => ({ name: n, data: entry.players[n] }));
@@ -48,9 +61,13 @@ export function mountArchive(el, vm, ctx) {
       .sort((a, b) => b.data.punkte.reduce((x, y) => x + y, 0) - a.data.punkte.reduce((x, y) => x + y, 0))
       .map((p, i) => ({ platz: i + 1, ...p }));
 
+    const notiz = notizDraft[entry.spielId] ?? entry.notiz ?? "";
+    const notizRendered = renderNotizText(entry.notiz || "", entry.players);
+
     return `
       <div style="padding:20px">
         <div style="font-size:28px;font-weight:700;margin-bottom:16px">${escapeHtml(entry.datum)}</div>
+
         <div class="kb-group-body" style="margin-bottom:20px">
           <div style="display:flex;font-size:12px;font-weight:700;padding:8px 16px;background:var(--kb-card-bg)">
             <span style="width:30px">Pl.</span><span style="flex:1">Spieler</span>
@@ -76,8 +93,9 @@ export function mountArchive(el, vm, ctx) {
             .join("")}
         </div>
 
+        ${entry.transaktionen.length > 0 ? `
         <div style="font-weight:700;margin-bottom:8px">Transaktionen</div>
-        <div class="kb-group-body">
+        <div class="kb-group-body" style="margin-bottom:20px">
           ${entry.transaktionen
             .map(
               (t, i) => `
@@ -89,6 +107,26 @@ export function mountArchive(el, vm, ctx) {
           `
             )
             .join("")}
+        </div>` : ""}
+
+        <div style="font-weight:700;margin-bottom:8px">📝 Notizen</div>
+        <div class="kb-group-body" style="margin-bottom:8px">
+          ${notizRendered
+            ? `<div class="kb-notiz-display" id="notiz-display-${entry.spielId}">${notizRendered}</div>`
+            : `<div style="padding:12px 16px;font-size:13px;color:var(--kb-text-tertiary)">Noch keine Notiz für diesen Spieltag.</div>`}
+        </div>
+        <div style="position:relative">
+          <textarea
+            id="notiz-input-${entry.spielId}"
+            class="kb-notiz-textarea"
+            placeholder="Notiz eingeben … @Name für Spielererwähnung"
+            data-spielid="${entry.spielId}"
+          >${escapeHtml(notiz)}</textarea>
+          <div id="mention-dropdown" class="mention-dropdown" style="display:none"></div>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
+          ${notiz !== (entry.notiz || "") ? `<button class="kb-btn" data-act="discard-notiz" data-spielid="${entry.spielId}">Verwerfen</button>` : ""}
+          <button class="kb-btn prominent" data-act="save-notiz" data-spielid="${entry.spielId}">Notiz speichern</button>
         </div>
       </div>
     `;
@@ -106,6 +144,125 @@ export function mountArchive(el, vm, ctx) {
         render();
       });
     });
+
+    if (!selected) return;
+
+    // Notiz save
+    el.querySelector("[data-act='save-notiz']")?.addEventListener("click", (e) => {
+      const spielId = Number(e.currentTarget.dataset.spielid);
+      const ta = el.querySelector(`#notiz-input-${spielId}`);
+      const text = ta?.value ?? "";
+      DB.speichereHistorieNotiz(spielId, text);
+      const entry = entries.find((x) => x.spielId === spielId);
+      if (entry) entry.notiz = text;
+      delete notizDraft[spielId];
+      render();
+    });
+
+    el.querySelector("[data-act='discard-notiz']")?.addEventListener("click", (e) => {
+      const spielId = Number(e.currentTarget.dataset.spielid);
+      delete notizDraft[spielId];
+      const ta = el.querySelector(`#notiz-input-${spielId}`);
+      if (ta) {
+        const entry = entries.find((x) => x.spielId === spielId);
+        ta.value = entry?.notiz ?? "";
+      }
+      render();
+    });
+
+    // @mention logic
+    const ta = el.querySelector("textarea[data-spielid]");
+    const dropdown = el.querySelector("#mention-dropdown");
+    if (!ta || !dropdown) return;
+
+    const spielId = Number(ta.dataset.spielid);
+    const entry = entries.find((x) => x.spielId === spielId);
+    const playerNames = entry ? Object.keys(entry.players) : [];
+
+    ta.addEventListener("input", () => {
+      notizDraft[spielId] = ta.value;
+      const partial = getMentionPartial(ta);
+      if (partial !== null && playerNames.length) {
+        const matches = playerNames.filter((n) => n.toLowerCase().startsWith(partial.toLowerCase()));
+        if (matches.length) {
+          showDropdown(dropdown, ta, matches, partial, (chosen) => {
+            insertMention(ta, partial, chosen);
+            notizDraft[spielId] = ta.value;
+            hideDropdown(dropdown);
+          });
+          return;
+        }
+      }
+      hideDropdown(dropdown);
+    });
+
+    ta.addEventListener("keydown", (e) => {
+      if (dropdown.style.display === "none") return;
+      const items = dropdown.querySelectorAll(".mention-item");
+      const active = dropdown.querySelector(".mention-item.active");
+      const idx = active ? [...items].indexOf(active) : -1;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        items[Math.min(idx + 1, items.length - 1)]?.classList.add("active");
+        active?.classList.remove("active");
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        active?.classList.remove("active");
+        items[Math.max(idx - 1, 0)]?.classList.add("active");
+      } else if (e.key === "Enter" || e.key === "Tab") {
+        const act = dropdown.querySelector(".mention-item.active") || items[0];
+        if (act) {
+          e.preventDefault();
+          act.click();
+        }
+      } else if (e.key === "Escape") {
+        hideDropdown(dropdown);
+      }
+    });
+
+    ta.addEventListener("blur", () => setTimeout(() => hideDropdown(dropdown), 150));
+  }
+
+  // ---- @mention helpers ----
+
+  function getMentionPartial(ta) {
+    const pos = ta.selectionStart;
+    const before = ta.value.slice(0, pos);
+    const match = before.match(/@(\w*)$/);
+    return match ? match[1] : null;
+  }
+
+  function insertMention(ta, partial, name) {
+    const pos = ta.selectionStart;
+    const before = ta.value.slice(0, pos);
+    const after = ta.value.slice(pos);
+    const replaced = before.replace(/@\w*$/, `@${name} `);
+    ta.value = replaced + after;
+    const newPos = replaced.length;
+    ta.setSelectionRange(newPos, newPos);
+    ta.focus();
+  }
+
+  function showDropdown(dropdown, ta, matches, partial, onSelect) {
+    dropdown.style.display = "block";
+    dropdown.innerHTML = matches
+      .map(
+        (n) =>
+          `<button class="mention-item" type="button"><span class="mention-match">@${escapeHtml(n.slice(0, partial.length))}</span>${escapeHtml(n.slice(partial.length))}</button>`
+      )
+      .join("");
+    dropdown.querySelectorAll(".mention-item").forEach((btn, i) => {
+      if (i === 0) btn.classList.add("active");
+      btn.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        onSelect(btn.textContent.trim().replace(/^@/, ""));
+      });
+    });
+  }
+
+  function hideDropdown(dropdown) {
+    dropdown.style.display = "none";
+    dropdown.innerHTML = "";
   }
 
   render();

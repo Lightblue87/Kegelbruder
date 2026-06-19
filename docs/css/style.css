@@ -216,10 +216,11 @@ html[data-theme="dark"] #app-bg::after { opacity: 0.16; }
 .sidebar-header .logo {
   width: 36px; height: 36px;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--kb-primary), var(--kb-primary-deep));
-  display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 700; font-size: 15px;
-  box-shadow: 0 6px 14px rgba(66,133,244,0.35);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.sidebar-header .logo img {
+  width: 100%; height: 100%; display: block;
 }
 .sidebar-header .title { font-size: 17px; font-weight: 700; letter-spacing: -0.2px; }
 
@@ -370,6 +371,65 @@ html[data-theme="dark"] .kb-btn { border-color: rgba(255,255,255,0.12); }
   width: 100%;
 }
 .kb-text-input:focus { outline: 2px solid var(--kb-primary); }
+
+/* ---- Archiv-Notiz + @mention ---- */
+.kb-notiz-display {
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.kb-notiz-textarea {
+  width: 100%;
+  min-height: 72px;
+  background: var(--kb-fill-tertiary);
+  border: none;
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--kb-text);
+  resize: vertical;
+  box-sizing: border-box;
+  display: block;
+}
+.kb-notiz-textarea:focus { outline: 2px solid var(--kb-primary); }
+.kb-notiz-textarea::placeholder { color: var(--kb-text-tertiary); }
+
+.mention-dropdown {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--kb-card-bg-solid);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px var(--kb-shadow);
+  overflow: hidden;
+  z-index: 200;
+}
+.mention-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  text-align: left;
+  border: none;
+  background: none;
+  font-size: 15px;
+  color: var(--kb-text);
+  cursor: pointer;
+}
+.mention-item.active,
+.mention-item:hover { background: var(--kb-primary-tint); color: var(--kb-primary-strong); }
+.mention-match { font-weight: 700; }
+
+/* ---- Regelbuch ---- */
+.kb-regel-row {
+  padding: 12px 16px;
+}
+.kb-regel-row.editing {
+  background: color-mix(in srgb, var(--kb-primary) 4%, transparent);
+}
 .kb-sync-field {
   display: grid;
   gap: 5px;
@@ -503,7 +563,7 @@ select.kb-select {
   z-index: 2;
 }
 .game-row.winner { background: color-mix(in srgb, var(--kb-brass-400) 6%, transparent); }
-.col-name { flex: 1 1 auto; min-width: 100px; padding-left: 4px; display: flex; flex-direction: column; gap: 2px; }
+.col-name { flex: 1 1 auto; min-width: 100px; padding-left: 4px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
 .col-name .pname { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: 600; }
 .col-cat { width: 88px; text-align: center; flex-shrink: 0; }
 .col-rd { width: 68px; text-align: center; flex-shrink: 0; }

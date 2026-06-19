@@ -25,6 +25,7 @@ const UI_SETTINGS_KEY = "kegelbruder_pwa_ui_settings"; // PWA-only prefs, not pa
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS mitglieder (
     name TEXT PRIMARY KEY,
+    vollname TEXT NOT NULL DEFAULT '',
     typ TEXT NOT NULL DEFAULT 'Stamm',
     offene_zahlung REAL NOT NULL DEFAULT 0.0
 );
@@ -56,7 +57,8 @@ CREATE TABLE IF NOT EXISTS aktuelles_spiel_meta (
 CREATE TABLE IF NOT EXISTS historie (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     datum TEXT NOT NULL,
-    spieler_reihenfolge TEXT
+    spieler_reihenfolge TEXT,
+    notiz TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS historie_spieler (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +79,37 @@ CREATE TABLE IF NOT EXISTS historie_transaktionen (
     spiel_id INTEGER NOT NULL REFERENCES historie(id) ON DELETE CASCADE,
     text TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS regeln (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    paragraph INTEGER NOT NULL,
+    absatz INTEGER NOT NULL,
+    paragraf_titel TEXT NOT NULL DEFAULT '',
+    absatz_titel TEXT NOT NULL DEFAULT '',
+    regel_text TEXT NOT NULL DEFAULT '',
+    betrag_strafe TEXT NOT NULL DEFAULT ''
+);
 `;
+
+const DEFAULT_REGELN = [
+  [1,1,"§1 Der Stamm","Grundsatz","Der Stamm entscheidet mit der demokratischen Entscheidungsform per Mehrheit über:",""],
+  [1,2,"§1 Der Stamm","Mitglieder","… die Aufnahme neuer Mitglieder in den Stamm.",""],
+  [1,3,"§1 Der Stamm","Ausschluss","… den Ausschluss aus dem Stamm (ggf. auch Schuldenerlass).",""],
+  [1,4,"§1 Der Stamm","Regeln","… die Anpassung, das Aussetzen, das Hinzufügen von Regeln.",""],
+  [1,5,"§1 Der Stamm","Kassenbudget","… die Nutzung des Kassenbudgets.",""],
+  [1,6,"§1 Der Stamm","Strafen","… die Anpassung, das Aussetzen, das Hinzufügen von Strafen.",""],
+  [2,1,"§2 Gebühren","Anwesenheit Stamm","Jedes Stammmitglied, welches im Stammbuch eingetragen ist, entrichtet p. stattgefundenes Treffen 5 € Startgebühr in die Kegelkasse – dies erfolgt unabhängig von der physischen Anwesenheit. Strafen der folgenden Absätze sind hinzuzurechnen.","5 €"],
+  [2,2,"§2 Gebühren","Passive Anwesenheit","Passive Anwesenheit befreit von den Strafzahlungen für Abwesenheit, wenn das Stammmitglied anwesend ist, bevor es in der Kegelfolge aktiv werden müsste (2. Runde nicht gestartet).","Befreiung"],
+  [2,3,"§2 Gebühren","Abwesenheit","Abwesende Stammmitglieder entrichten für den Ausfall der während des Spiels entstehenden Strafzahlungen eine Pauschale.","2,50 €"],
+  [2,4,"§2 Gebühren","Anwesenheit des Stamms kleiner als 50 %","An Treffen, an denen weniger als 50 % des Stammes anwesend sind, gilt es für die Abwesenden einen Zusatzbeitrag zu entrichten.","5 €"],
+  [2,5,"§2 Gebühren","Entrichtung der Kegelgebühren","Ein Mitglied des Vorstandes oder ein Stammmitglied begleicht p. Treffen an den Gastwirt die Gebühren für die Kegelbahn aus dem Budget der Kasse und lässt sich dies gegenzeichnen.","30 €"],
+  [4,1,"§4 Kegelregeln","Kugel im Raum","Wer den Gastroraum mit Kugel betritt, zahlt eine Runde.","Runde"],
+  [4,2,"§4 Kegelregeln","Überworfen","Wer mehr als 10 Würfe ohne Abstimmung macht, zahlt eine Runde.","Runde"],
+  [4,3,"§4 Kegelregeln","Fangen der Kugel","Wenn die eigene Kugel von einem anderen gefangen wird (weil zu langsam), zahlt der Werfer eine Runde.","Runde"],
+  [4,4,"§4 Kegelregeln","Gescheiterter Versuch","Wer versucht eine Kugel zu fangen, aber ohne diese wieder zurück über die Abwurflinie kommt, zahlt eine Runde.","Runde"],
+  [4,5,"§4 Kegelregeln","10× gleicher Wurf","Wer z.B. 10× die 7 wirft, zahlt eine Runde.","Runde"],
+  [5,1,"§5 Stechen","Pumpen-Gleichstand","Gleiche Anzahl an Pumpen nach 4 Runden muss gestochen werden (1. & 2. Pumpe).","Runde"],
+  [5,2,"§5 Stechen","Punktgleichstand","Egal welcher Platz – Punktgleichstand nach 4 Runden muss gestochen werden!","Runde"],
+];
 
 const DEFAULT_KASSE_EINSTELLUNGEN = [
   ["Startgeld", 5.0],
@@ -143,6 +175,29 @@ let saveTimer = null;
 function ensureDefaultKasse() {
   for (const [key, val] of DEFAULT_KASSE_EINSTELLUNGEN) {
     sq.run("INSERT OR IGNORE INTO kasse_einstellungen (schluessel, wert) VALUES (?, ?)", [key, val]);
+  }
+}
+
+function applyMigrations() {
+  // v2: notiz column on historie
+  const historieCols = (sq.exec("PRAGMA table_info(historie)")[0]?.values ?? []).map((r) => r[1]);
+  if (!historieCols.includes("notiz")) {
+    sq.run("ALTER TABLE historie ADD COLUMN notiz TEXT NOT NULL DEFAULT ''");
+  }
+  // v3: vollname column on mitglieder
+  const mitgliederCols = (sq.exec("PRAGMA table_info(mitglieder)")[0]?.values ?? []).map((r) => r[1]);
+  if (!mitgliederCols.includes("vollname")) {
+    sq.run("ALTER TABLE mitglieder ADD COLUMN vollname TEXT NOT NULL DEFAULT ''");
+  }
+  // Seed regeln if the table is empty (fresh DB or imported DB without rules)
+  const hasRegeln = sq.exec("SELECT COUNT(*) FROM regeln")[0].values[0][0] > 0;
+  if (!hasRegeln) {
+    for (const [para, abs, ptitel, atitel, text, betrag] of DEFAULT_REGELN) {
+      sq.run(
+        "INSERT INTO regeln (paragraph,absatz,paragraf_titel,absatz_titel,regel_text,betrag_strafe) VALUES (?,?,?,?,?,?)",
+        [para, abs, ptitel, atitel, text, betrag]
+      );
+    }
   }
 }
 
@@ -274,6 +329,7 @@ async function openFresh(bytes) {
   sq = bytes ? new SQL.Database(new Uint8Array(bytes)) : new SQL.Database();
   sq.run(SCHEMA_SQL);
   ensureDefaultKasse();
+  applyMigrations();
 }
 
 function openValidated(bytes) {
@@ -317,8 +373,9 @@ export const DB = {
   // ---- Mitglieder ----
   ladeMitglieder() {
     const result = {};
-    for (const row of queryAll("SELECT name, typ, offene_zahlung FROM mitglieder")) {
+    for (const row of queryAll("SELECT name, vollname, typ, offene_zahlung FROM mitglieder")) {
       result[row.name] = defaultPlayerData(row.typ);
+      result[row.name].vollname = row.vollname || "";
       result[row.name].offene_zahlung = row.offene_zahlung;
     }
     return result;
@@ -327,7 +384,7 @@ export const DB = {
     withTransaction(() => {
       run("DELETE FROM mitglieder");
       for (const [name, d] of Object.entries(players)) {
-        run("INSERT INTO mitglieder (name, typ, offene_zahlung) VALUES (?, ?, ?)", [name, d.typ, d.offene_zahlung]);
+        run("INSERT INTO mitglieder (name, vollname, typ, offene_zahlung) VALUES (?, ?, ?, ?)", [name, d.vollname || "", d.typ, d.offene_zahlung]);
       }
     });
     persist();
@@ -430,7 +487,7 @@ export const DB = {
   // ---- Historie ----
   ladeHistorie() {
     const entries = [];
-    for (const spiel of queryAll("SELECT id, datum, spieler_reihenfolge FROM historie ORDER BY id ASC")) {
+    for (const spiel of queryAll("SELECT id, datum, spieler_reihenfolge, notiz FROM historie ORDER BY id ASC")) {
       const players = {};
       for (const row of queryAll(
         `SELECT name, typ, punkte_r1, punkte_r2, punkte_r3, punkte_r4, pumpen, neuner, kranz, offene_zahlung
@@ -456,7 +513,7 @@ export const DB = {
       } catch {
         reihenfolge = [];
       }
-      entries.push({ spielId: spiel.id, datum: spiel.datum, players, transaktionen, spieler_reihenfolge: reihenfolge });
+      entries.push({ spielId: spiel.id, datum: spiel.datum, players, transaktionen, spieler_reihenfolge: reihenfolge, notiz: spiel.notiz || "" });
     }
     return entries;
   },
@@ -482,6 +539,20 @@ export const DB = {
     return entry;
   },
 
+  speichereHistorieNotiz(spielId, notiz) {
+    run("UPDATE historie SET notiz = ? WHERE id = ?", [notiz, spielId]);
+    persist();
+  },
+
+  // ---- Regeln ----
+  ladeRegeln() {
+    return queryAll("SELECT id, paragraph, absatz, paragraf_titel, absatz_titel, regel_text, betrag_strafe FROM regeln ORDER BY paragraph, absatz, id");
+  },
+  speichereRegel(id, regelText, betragStrafe) {
+    run("UPDATE regeln SET regel_text = ?, betrag_strafe = ? WHERE id = ?", [regelText, betragStrafe, id]);
+    persist();
+  },
+
   // ---- PWA-only UI settings (theme) — kept separate from the club schema ----
   getSettings() {
     try {
@@ -504,6 +575,7 @@ export const DB = {
     const previous = sq;
     sq = next;
     ensureDefaultKasse();
+    applyMigrations();
     try {
       await persistNow();
       previous.close();
