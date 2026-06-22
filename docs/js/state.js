@@ -507,6 +507,39 @@ class Store {
     DB.speichereAktuellesSpiel({ players: {}, runde: 0, abgerechnet: false, spieler_reihenfolge: null });
   }
 
+  /**
+   * Closes the game as "Spielausfall" — keeps all start fees and penalties already
+   * charged to members (no rollback), only resets the running game state.
+   */
+  spielausfallAbschließen() {
+    const datum = formatDatum();
+    const stammGesamt = Object.values(this.mitglieder).filter((m) => m.typ === "Stamm").length;
+    const stammAnwesend = this.players.filter((p) => p.typ === "Stamm").length;
+
+    // Record the event in Transaktionen so it appears in the history
+    const text = `[${datum}] Spielausfall – ${stammAnwesend} anwesend / ${stammGesamt - stammAnwesend} abwesend (Startgebühren & Strafen verbucht)`;
+    this.kasse.Transaktionen = this.kasse.Transaktionen || [];
+    this.kasse.Transaktionen.push(text);
+    DB.speichereKasse(this.kasse);
+
+    // Reset game state — intentionally NO rollback of sessionTx / preSessionSchulden
+    this.sessionTx = [];
+    this.preSessionSchulden = {};
+    this.billingRows = [];
+    this.billingGezahlt = {};
+    this.tiebreakExtras = {};
+    this.pumpRank = {};
+    this.pendingAttendees = [];
+    this.pendingGäste = [];
+    this.players = [];
+    this.gameRunning = false;
+    this.abgerechnet = false;
+    this.route = null;
+
+    DB.speichereAktuellesSpiel({ players: {}, runde: 0, abgerechnet: false, spieler_reihenfolge: null });
+  }
+
+
   // ---------------------------------------------------------------- Cash management
 
   einzahlen(betrag, beschreibung, spielerName = null, konto = false) {
@@ -604,11 +637,6 @@ class Store {
       if (gruppe.length >= 2) {
         const tiebreakPunkte = gruppe.map((p) => this.tiebreakExtras[p.name]?.punkte || 0);
         if (new Set(tiebreakPunkte).size > 1) {
-          i = j;
-          continue;
-        }
-        // If tiebreak has been played (any points > 0) but still all equal → accept as true draw
-        if (tiebreakPunkte.some((p) => p > 0)) {
           i = j;
           continue;
         }
