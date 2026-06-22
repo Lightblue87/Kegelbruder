@@ -180,7 +180,7 @@ class Store {
         const text = perKarte
           ? this._addEinzahlungKonto(zahlungAufSchuld, beschreibung, datum)
           : this._addEinzahlung(zahlungAufSchuld, beschreibung, datum);
-        this.sessionTx.push({ kind: "einzahlung", betrag: zahlungAufSchuld, text });
+        this.sessionTx.push({ kind: "einzahlung", betrag: zahlungAufSchuld, text, konto: perKarte });
       }
 
       const spende = round2(Math.max(0, round2(betrag) - zahlungAufSchuld));
@@ -189,7 +189,7 @@ class Store {
         const text = perKarte
           ? this._addEinzahlungKonto(spende, beschreibung, datum)
           : this._addEinzahlung(spende, beschreibung, datum);
-        this.sessionTx.push({ kind: "einzahlung", betrag: spende, text });
+        this.sessionTx.push({ kind: "einzahlung", betrag: spende, text, konto: perKarte });
       }
     }
 
@@ -203,8 +203,12 @@ class Store {
 
     const k = clone(this.kasse);
     for (const tx of [...this.sessionTx].reverse()) {
-      if (tx.kind === "einzahlung") k.Kassenstand = Math.max(0, round2(k.Kassenstand - tx.betrag));
-      else k.Kassenstand += tx.betrag;
+      if (tx.kind === "einzahlung") {
+        if (tx.konto) k.Kontostand = Math.max(0, round2(k.Kontostand - tx.betrag));
+        else k.Kassenstand = Math.max(0, round2(k.Kassenstand - tx.betrag));
+      } else if (tx.kind === "auszahlung") {
+        k.Kassenstand = round2(k.Kassenstand + tx.betrag);
+      }
       const idx = k.Transaktionen.lastIndexOf(tx.text);
       if (idx >= 0) k.Transaktionen.splice(idx, 1);
     }
@@ -403,7 +407,7 @@ class Store {
         const text = row.perKarte
           ? this._addEinzahlungKonto(zahlungAufSchuld, `Zahlung von ${row.player.name} (Karte)`, datum)
           : this._addEinzahlung(zahlungAufSchuld, `${datum} - Zahlung von ${row.player.name}`, datum);
-        this.sessionTx.push({ kind: "einzahlung", betrag: zahlungAufSchuld, text });
+        this.sessionTx.push({ kind: "einzahlung", betrag: zahlungAufSchuld, text, konto: row.perKarte });
         gesamtZahlungen += zahlungAufSchuld;
       }
 
@@ -412,7 +416,7 @@ class Store {
         const text = row.perKarte
           ? this._addEinzahlungKonto(spende, `Spende von ${row.player.name} (Karte)`, datum)
           : this._addEinzahlung(spende, `${datum} - Spende von ${row.player.name}`, datum);
-        this.sessionTx.push({ kind: "einzahlung", betrag: spende, text });
+        this.sessionTx.push({ kind: "einzahlung", betrag: spende, text, konto: row.perKarte });
         gesamtZahlungen += spende;
       }
 
@@ -469,8 +473,12 @@ class Store {
   spielAbbrechen() {
     const k = clone(this.kasse);
     for (const tx of [...this.sessionTx].reverse()) {
-      if (tx.kind === "einzahlung") k.Kassenstand = Math.max(0, round2(k.Kassenstand - tx.betrag));
-      else k.Kassenstand += tx.betrag;
+      if (tx.kind === "einzahlung") {
+        if (tx.konto) k.Kontostand = Math.max(0, round2(k.Kontostand - tx.betrag));
+        else k.Kassenstand = Math.max(0, round2(k.Kassenstand - tx.betrag));
+      } else if (tx.kind === "auszahlung") {
+        k.Kassenstand = round2(k.Kassenstand + tx.betrag);
+      }
       const idx = k.Transaktionen.lastIndexOf(tx.text);
       if (idx >= 0) k.Transaktionen.splice(idx, 1);
     }
