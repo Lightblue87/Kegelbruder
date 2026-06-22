@@ -116,31 +116,49 @@ const actions = {
   },
   abrechnungStarten() {
     if (!vm.hatRundenpunkte) {
-      vm.alert = {
-        title: "Keine Punkte eingetragen",
-        message: "Wie soll mit diesem Spielabend verfahren werden? Die gewählte Regelung wird auf alle Stammmitglieder angewendet und im Archiv festgehalten.",
-        buttons: [
-          {
-            label: "Nur Startgebühr",
-            onClick: () => { vm.spielausfallAbschließen("nurStartgebuehr"); fullRender(); },
-          },
-          {
-            label: "Startgebühr + Strafe",
-            onClick: () => { vm.spielausfallAbschließen("startgebuehrUndStrafe"); fullRender(); },
-          },
-          {
-            label: "Ohne Kosten archivieren",
-            onClick: () => { vm.spielausfallAbschließen("ohneKosten"); fullRender(); },
-          },
-          {
-            label: "Spiel verwerfen",
-            role: "destructive",
-            onClick: () => { vm.spielAbbrechen(); fullRender(); },
-          },
-          { label: "Weiter spielen", role: "cancel" },
-        ],
-      };
-      alertHostRender(vm.alert);
+      function zeigeModusDialog(mitBahngebuehr) {
+        const bahnLabel = mitBahngebuehr ? ` (inkl. Bahngebühr ${vm.kasse.Bahngebuehr.toFixed(2).replace(".", ",")} €)` : " (ohne Bahngebühr)";
+        vm.alert = {
+          title: "Spielausfall – Regelung wählen",
+          message: `Angewendet auf alle Stammmitglieder${bahnLabel}.`,
+          buttons: [
+            {
+              label: "Nur Startgebühr",
+              onClick: () => { vm.spielausfallAbschließen("nurStartgebuehr", mitBahngebuehr); fullRender(); },
+            },
+            {
+              label: "Startgebühr + Strafe",
+              onClick: () => { vm.spielausfallAbschließen("startgebuehrUndStrafe", mitBahngebuehr); fullRender(); },
+            },
+            {
+              label: "Ohne Kosten archivieren",
+              onClick: () => { vm.spielausfallAbschließen("ohneKosten", mitBahngebuehr); fullRender(); },
+            },
+            {
+              label: "Spiel verwerfen",
+              role: "destructive",
+              onClick: () => { vm.spielAbbrechen(); fullRender(); },
+            },
+            { label: "Weiter spielen", role: "cancel" },
+          ],
+        };
+        alertHostRender(vm.alert);
+      }
+
+      if (vm.kasse.Bahngebuehr > 0) {
+        vm.alert = {
+          title: "Fallen Bahngebühren an?",
+          message: `Bahngebühr: ${vm.kasse.Bahngebuehr.toFixed(2).replace(".", ",")} €`,
+          buttons: [
+            { label: "Ja, Bahngebühr berechnen", onClick: () => zeigeModusDialog(true) },
+            { label: "Nein, ohne Bahngebühr", onClick: () => zeigeModusDialog(false) },
+            { label: "Weiter spielen", role: "cancel" },
+          ],
+        };
+        alertHostRender(vm.alert);
+      } else {
+        zeigeModusDialog(false);
+      }
       return;
     }
     const sheet = vm.abrechnungStarten();

@@ -512,11 +512,9 @@ class Store {
    * Stamm members (not just the ones selected at game start).
    *
    * @param {"nurStartgebuehr"|"startgebuehrUndStrafe"|"ohneKosten"} modus
-   *   nurStartgebuehr    — every Stamm member is charged Startgeld
-   *   startgebuehrUndStrafe — present Stamm get Startgeld, absent Stamm get Strafe_Stamm
-   *   ohneKosten         — no fees, but the event is archived
+   * @param {boolean} mitBahngebuehr  whether to deduct Bahngebühr from Kassenstand
    */
-  spielausfallAbschließen(modus) {
+  spielausfallAbschließen(modus, mitBahngebuehr) {
     const datum = formatDatum();
 
     // 1. Roll back whatever berechneStartgebuehren already charged (it only covered
@@ -560,21 +558,28 @@ class Store {
       }
     }
 
-    // 3. Record event in Transaktionen.
+    // 3. Optionally deduct Bahngebühr.
+    if (mitBahngebuehr && this.kasse.Bahngebuehr > 0) {
+      const text = this._addAuszahlung(this.kasse.Bahngebuehr, `${datum} - Bahngebühr (Spielausfall)`, datum);
+      this.sessionTx.push({ kind: "auszahlung", betrag: this.kasse.Bahngebuehr, text });
+    }
+
+    // 4. Record event in Transaktionen.
     const modusText =
       modus === "nurStartgebuehr"
         ? "Nur Startgebühr"
         : modus === "startgebuehrUndStrafe"
         ? "Startgebühr + Strafe"
         : "Ohne Kosten";
-    const archivText = `[${datum}] Spielausfall – ${modusText} – ${stammEintraege.length} Stammmitglieder`;
+    const bahnText = mitBahngebuehr && this.kasse.Bahngebuehr > 0 ? ` + Bahngebühr` : "";
+    const archivText = `[${datum}] Spielausfall – ${modusText}${bahnText} – ${stammEintraege.length} Stammmitglieder`;
     this.kasse.Transaktionen.push(archivText);
 
     DB.speichereMitglieder(mitglieder);
     DB.speichereKasse(this.kasse);
     this.mitglieder = mitglieder;
 
-    // 4. Archive the event so it appears in the Archiv view.
+    // 5. Archive the event so it appears in the Archiv view.
     const archivePlayers = {};
     const reihenfolge = stammEintraege.map(([n]) => n).sort();
     for (const [name, data] of stammEintraege) {
@@ -595,7 +600,7 @@ class Store {
       this.archivFehler = "Spielausfall konnte nicht archiviert werden: " + e.message;
     }
 
-    // 5. Reset game state.
+    // 6. Reset game state.
     this.sessionTx = [];
     this.preSessionSchulden = {};
     this.billingRows = [];
