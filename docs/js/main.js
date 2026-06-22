@@ -118,24 +118,26 @@ const actions = {
     if (!vm.hatRundenpunkte) {
       vm.alert = {
         title: "Keine Punkte eingetragen",
-        message: "Es wurden noch keine Punkte erfasst.\n\n„Spielausfall abrechnen" behält alle Startgebühren und Strafen als Schulden — ideal wenn der Abend ausgefallen ist.\n\n„Spiel verwerfen" macht alle Gebühren rückgängig.",
+        message: "Wie soll mit diesem Spielabend verfahren werden? Die gewählte Regelung wird auf alle Stammmitglieder angewendet und im Archiv festgehalten.",
         buttons: [
-          { label: "Weiter spielen", role: "cancel" },
           {
-            label: "Spielausfall abrechnen",
-            onClick: () => {
-              vm.spielausfallAbschließen();
-              fullRender();
-            },
+            label: "Nur Startgebühr",
+            onClick: () => { vm.spielausfallAbschließen("nurStartgebuehr"); fullRender(); },
+          },
+          {
+            label: "Startgebühr + Strafe",
+            onClick: () => { vm.spielausfallAbschließen("startgebuehrUndStrafe"); fullRender(); },
+          },
+          {
+            label: "Ohne Kosten archivieren",
+            onClick: () => { vm.spielausfallAbschließen("ohneKosten"); fullRender(); },
           },
           {
             label: "Spiel verwerfen",
             role: "destructive",
-            onClick: () => {
-              vm.spielAbbrechen();
-              fullRender();
-            },
+            onClick: () => { vm.spielAbbrechen(); fullRender(); },
           },
+          { label: "Weiter spielen", role: "cancel" },
         ],
       };
       alertHostRender(vm.alert);
