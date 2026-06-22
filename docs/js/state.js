@@ -607,6 +607,11 @@ class Store {
           i = j;
           continue;
         }
+        // If tiebreak has been played (any points > 0) but still all equal → accept as true draw
+        if (tiebreakPunkte.some((p) => p > 0)) {
+          i = j;
+          continue;
+        }
         return gruppe.map((p) => p.name);
       }
       i = j;

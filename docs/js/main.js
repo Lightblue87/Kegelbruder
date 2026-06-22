@@ -115,6 +115,25 @@ const actions = {
     renderSidebarOnly();
   },
   abrechnungStarten() {
+    if (!vm.hatRundenpunkte) {
+      vm.alert = {
+        title: "Keine Punkte eingetragen",
+        message: "Es wurden noch keine Punkte erfasst. Soll das Spiel wirklich abgebrochen werden?",
+        buttons: [
+          { label: "Weiter spielen", role: "cancel" },
+          {
+            label: "Ja, abbrechen",
+            role: "destructive",
+            onClick: () => {
+              vm.spielAbbrechen();
+              fullRender();
+            },
+          },
+        ],
+      };
+      alertHostRender(vm.alert);
+      return;
+    }
     const sheet = vm.abrechnungStarten();
     if (sheet) openSheet(sheet);
     fullRender();
