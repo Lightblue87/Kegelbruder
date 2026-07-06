@@ -7,6 +7,7 @@ import { alertHostRender } from "../components.js";
 export function mountBilling(card, vm, ctx) {
   let rows = vm.berechneBillingRows();
   let gezahltStr = {};
+  let abrechnenInFlight = false;
 
   if (vm.billingRows.length > 0) {
     const saved = {};
@@ -136,6 +137,8 @@ export function mountBilling(card, vm, ctx) {
             label: "Abrechnen",
             role: "destructive",
             onClick: () => {
+              if (abrechnenInFlight) return;
+              abrechnenInFlight = true;
               vm.abrechnungSpeichern(rows);
               ctx.close();
               ctx.rerenderApp();

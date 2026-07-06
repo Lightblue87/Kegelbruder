@@ -314,7 +314,7 @@ export function mountAttendance(card, vm, ctx) {
   function weiter() {
     // 1. Persist new guests so berechneStartgebuehren can process their payments
     for (const gast of local.neueGäste) {
-      if (!vm.mitglieder[gast.name]) vm.spielerHinzufügen(gast.name, "Gast", 0);
+      if (gast.selected && !vm.mitglieder[gast.name]) vm.spielerHinzufügen(gast.name, "Gast", 0);
     }
 
     // 2. Merge attendance + payments
