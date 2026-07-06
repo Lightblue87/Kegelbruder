@@ -32,6 +32,7 @@ function close() {
 export function openNumpad(value, opts, onChange, onDone) {
   const h = ensureHost();
   let text = value || "";
+  let pendingClear = text !== ""; // first keystroke replaces pre-filled value
   const allowsDecimal = !!opts.allowsDecimal;
   const sep = (0.5).toLocaleString(undefined, { minimumFractionDigits: 1 }).includes(",") ? "," : ".";
 
@@ -57,6 +58,7 @@ export function openNumpad(value, opts, onChange, onDone) {
     `;
     h.querySelectorAll("[data-digit]").forEach((btn) => {
       btn.addEventListener("click", () => {
+        if (pendingClear) { text = ""; pendingClear = false; }
         text += btn.dataset.digit;
         onChange(text);
       });
@@ -64,12 +66,14 @@ export function openNumpad(value, opts, onChange, onDone) {
     const sepBtn = h.querySelector("[data-sep]");
     if (sepBtn) {
       sepBtn.addEventListener("click", () => {
+        if (pendingClear) { text = ""; pendingClear = false; }
         if (text.includes(",") || text.includes(".")) return;
         text += text === "" ? `0${sep}` : sep;
         onChange(text);
       });
     }
     h.querySelector("[data-back]").addEventListener("click", () => {
+      pendingClear = false;
       text = text.slice(0, -1);
       onChange(text);
     });

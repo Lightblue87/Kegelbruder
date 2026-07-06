@@ -24,7 +24,7 @@ export function mountArchive(el, vm, ctx) {
                   .map(
                     (entry) => `
               <button class="sidebar-item" data-entry="${entry.spielId}" style="display:block;width:100%;text-align:left;height:auto;${selected?.spielId === entry.spielId ? "background:var(--kb-primary);color:#fff" : ""}">
-                <div style="font-weight:700">${escapeHtml(entry.datum)}</div>
+                <div style="font-weight:700">${entry.transaktionen.some((t) => t.includes("Spielausfall")) ? "🚫 " : ""}${escapeHtml(entry.datum)}</div>
                 <div style="font-size:12px;${selected?.spielId === entry.spielId ? "color:rgba(255,255,255,0.85)" : "color:var(--kb-text-secondary)"};display:flex;justify-content:space-between;margin-top:2px">
                   <span>👥 ${Object.keys(entry.players).length} Spieler</span>
                   ${entry.notiz ? `<span>📝</span>` : `<span>📋 ${entry.transaktionen.length} Buchungen</span>`}
@@ -57,26 +57,42 @@ export function mountArchive(el, vm, ctx) {
   function detailHtml(entry) {
     const order = entry.spieler_reihenfolge || Object.keys(entry.players).sort();
     const players = order.filter((n) => entry.players[n]).map((n) => ({ name: n, data: entry.players[n] }));
-    const ranked = [...players]
-      .sort((a, b) => b.data.punkte.reduce((x, y) => x + y, 0) - a.data.punkte.reduce((x, y) => x + y, 0))
-      .map((p, i) => ({ platz: i + 1, ...p }));
+    const isSpielausfall = entry.transaktionen.some((t) => t.includes("Spielausfall"));
 
     const notiz = notizDraft[entry.spielId] ?? entry.notiz ?? "";
     const notizRendered = renderNotizText(entry.notiz || "", entry.players);
 
-    return `
-      <div style="padding:20px">
-        <div style="font-size:28px;font-weight:700;margin-bottom:16px">${escapeHtml(entry.datum)}</div>
-
-        <div class="kb-group-body" style="margin-bottom:20px">
-          <div style="display:flex;font-size:12px;font-weight:700;padding:8px 16px;background:var(--kb-card-bg)">
-            <span style="width:30px">Pl.</span><span style="flex:1">Spieler</span>
-            ${[1, 2, 3, 4].map((r) => `<span style="width:40px;text-align:center">Rd${r}</span>`).join("")}
-            <span style="width:44px;text-align:center">Σ</span><span style="width:50px;text-align:center">Pump</span>
-          </div>
-          <div class="kb-row-divider"></div>
-          ${ranked
-            .map((p, i) => {
+    const spielerTableHtml = isSpielausfall
+      ? (() => {
+          return `
+          <div class="kb-group-body" style="margin-bottom:20px">
+            <div style="padding:10px 16px;font-size:13px;font-weight:700;color:var(--kb-text-secondary);background:var(--kb-card-bg)">
+              🚫 Spielausfall – Stammmitglieder
+            </div>
+            <div class="kb-row-divider"></div>
+            ${players
+              .map((p, i) => `
+              <div style="display:flex;align-items:center;padding:8px 16px">
+                <span style="flex:1">${escapeHtml(p.name)}</span>
+                <span class="u-mono" style="font-size:14px;color:var(--kb-danger)">${money(p.data.offene_zahlung)} offen</span>
+              </div>
+              ${i < players.length - 1 ? `<div class="kb-row-divider"></div>` : ""}
+            `).join("")}
+          </div>`;
+        })()
+      : (() => {
+          const ranked = [...players]
+            .sort((a, b) => b.data.punkte.reduce((x, y) => x + y, 0) - a.data.punkte.reduce((x, y) => x + y, 0))
+            .map((p, i) => ({ platz: i + 1, ...p }));
+          return `
+          <div class="kb-group-body" style="margin-bottom:20px">
+            <div style="display:flex;font-size:12px;font-weight:700;padding:8px 16px;background:var(--kb-card-bg)">
+              <span style="width:30px">Pl.</span><span style="flex:1">Spieler</span>
+              ${[1, 2, 3, 4].map((r) => `<span style="width:40px;text-align:center">Rd${r}</span>`).join("")}
+              <span style="width:44px;text-align:center">Σ</span><span style="width:50px;text-align:center">Pump</span>
+            </div>
+            <div class="kb-row-divider"></div>
+            ${ranked.map((p, i) => {
               const sum = p.data.punkte.reduce((a, b) => a + b, 0);
               const isWinner = p.platz === 1;
               return `
@@ -87,11 +103,16 @@ export function mountArchive(el, vm, ctx) {
                 <span style="width:44px;text-align:center;font-weight:700;color:${isWinner ? "var(--kb-brass-500)" : "inherit"}" class="u-mono">${sum}</span>
                 <span style="width:50px;text-align:center;font-size:14px;color:var(--kb-pumpe)" class="u-mono">${p.data.pumpen ?? 0}</span>
               </div>
-              ${i < ranked.length - 1 ? `<div class="kb-row-divider"></div>` : ""}
-            `;
-            })
-            .join("")}
-        </div>
+              ${i < ranked.length - 1 ? `<div class="kb-row-divider"></div>` : ""}`;
+            }).join("")}
+          </div>`;
+        })();
+
+    return `
+      <div style="padding:20px">
+        <div style="font-size:28px;font-weight:700;margin-bottom:16px">${escapeHtml(entry.datum)}</div>
+
+        ${spielerTableHtml}
 
         ${entry.transaktionen.length > 0 ? `
         <div style="font-weight:700;margin-bottom:8px">Transaktionen</div>

@@ -21,6 +21,16 @@ const IDB_KEY = "kegelbruder.db";
 const LEGACY_LOCALSTORAGE_KEY = "kegelbruder_v1"; // from the first JSON-based PWA build
 const LEGACY_MIGRATION_DONE_KEY = "kegelbruder_v1_migrated";
 const UI_SETTINGS_KEY = "kegelbruder_pwa_ui_settings"; // PWA-only prefs, not part of the club schema
+// vollname is PWA-only and stored in localStorage so Desktop/iOS DELETE+re-insert cycles
+// can never wipe it (those clients omit the column entirely).
+const VOLLNAME_KEY = "kegelbruder_vollnamen"; // { [name]: vollname }
+
+function ladeVollnamen() {
+  try { return JSON.parse(localStorage.getItem(VOLLNAME_KEY) || "{}"); } catch { return {}; }
+}
+function speichereVollnamen(map) {
+  localStorage.setItem(VOLLNAME_KEY, JSON.stringify(map));
+}
 
 const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS mitglieder (
@@ -372,15 +382,29 @@ export const DB = {
 
   // ---- Mitglieder ----
   ladeMitglieder() {
+    const vollnamen = ladeVollnamen();
     const result = {};
     for (const row of queryAll("SELECT name, vollname, typ, offene_zahlung FROM mitglieder")) {
       result[row.name] = defaultPlayerData(row.typ);
-      result[row.name].vollname = row.vollname || "";
+      // localStorage takes precedence — Desktop/iOS re-inserts wipe the DB column
+      result[row.name].vollname = vollnamen[row.name] ?? row.vollname ?? "";
       result[row.name].offene_zahlung = row.offene_zahlung;
     }
     return result;
   },
   speichereMitglieder(players) {
+    // Persist vollname to localStorage so it survives Desktop/iOS DB overwrites.
+    const vollnamen = ladeVollnamen();
+    for (const [name, d] of Object.entries(players)) {
+      if (d.vollname) vollnamen[name] = d.vollname;
+      else delete vollnamen[name];
+    }
+    // Remove entries for deleted members.
+    for (const name of Object.keys(vollnamen)) {
+      if (!players[name]) delete vollnamen[name];
+    }
+    speichereVollnamen(vollnamen);
+
     withTransaction(() => {
       run("DELETE FROM mitglieder");
       for (const [name, d] of Object.entries(players)) {

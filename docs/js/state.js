@@ -172,12 +172,25 @@ class Store {
       if (!pd) continue;
       const datum = formatDatum();
       const perKarte = !!zahlungsarten[name];
-      const beschreibung = betrag >= pd.offene_zahlung ? `Zahlung von ${name}${perKarte ? " (Karte)" : ""}` : `Teilzahlung von ${name}${perKarte ? " (Karte)" : ""}`;
-      pd.offene_zahlung = Math.max(0, round2(pd.offene_zahlung - betrag));
-      const text = perKarte
-        ? this._addEinzahlungKonto(betrag, beschreibung, datum)
-        : this._addEinzahlung(betrag, beschreibung, datum);
-      this.sessionTx.push({ kind: "einzahlung", betrag, text });
+
+      const zahlungAufSchuld = Math.min(round2(betrag), round2(pd.offene_zahlung));
+      if (zahlungAufSchuld > 0) {
+        pd.offene_zahlung = round2(Math.max(0, pd.offene_zahlung - zahlungAufSchuld));
+        const beschreibung = `Zahlung von ${name}${perKarte ? " (Karte)" : ""}`;
+        const text = perKarte
+          ? this._addEinzahlungKonto(zahlungAufSchuld, beschreibung, datum)
+          : this._addEinzahlung(zahlungAufSchuld, beschreibung, datum);
+        this.sessionTx.push({ kind: "einzahlung", betrag: zahlungAufSchuld, text, konto: perKarte });
+      }
+
+      const spende = round2(Math.max(0, round2(betrag) - zahlungAufSchuld));
+      if (spende > 0) {
+        const beschreibung = `Spende von ${name}${perKarte ? " (Karte)" : ""}`;
+        const text = perKarte
+          ? this._addEinzahlungKonto(spende, beschreibung, datum)
+          : this._addEinzahlung(spende, beschreibung, datum);
+        this.sessionTx.push({ kind: "einzahlung", betrag: spende, text, konto: perKarte });
+      }
     }
 
     DB.speichereMitglieder(aktuelleMitglieder);
@@ -190,8 +203,12 @@ class Store {
 
     const k = clone(this.kasse);
     for (const tx of [...this.sessionTx].reverse()) {
-      if (tx.kind === "einzahlung") k.Kassenstand = Math.max(0, round2(k.Kassenstand - tx.betrag));
-      else k.Kassenstand += tx.betrag;
+      if (tx.kind === "einzahlung") {
+        if (tx.konto) k.Kontostand = Math.max(0, round2(k.Kontostand - tx.betrag));
+        else k.Kassenstand = Math.max(0, round2(k.Kassenstand - tx.betrag));
+      } else if (tx.kind === "auszahlung") {
+        k.Kassenstand = round2(k.Kassenstand + tx.betrag);
+      }
       const idx = k.Transaktionen.lastIndexOf(tx.text);
       if (idx >= 0) k.Transaktionen.splice(idx, 1);
     }
@@ -390,7 +407,7 @@ class Store {
         const text = row.perKarte
           ? this._addEinzahlungKonto(zahlungAufSchuld, `Zahlung von ${row.player.name} (Karte)`, datum)
           : this._addEinzahlung(zahlungAufSchuld, `${datum} - Zahlung von ${row.player.name}`, datum);
-        this.sessionTx.push({ kind: "einzahlung", betrag: zahlungAufSchuld, text });
+        this.sessionTx.push({ kind: "einzahlung", betrag: zahlungAufSchuld, text, konto: row.perKarte });
         gesamtZahlungen += zahlungAufSchuld;
       }
 
@@ -399,7 +416,7 @@ class Store {
         const text = row.perKarte
           ? this._addEinzahlungKonto(spende, `Spende von ${row.player.name} (Karte)`, datum)
           : this._addEinzahlung(spende, `${datum} - Spende von ${row.player.name}`, datum);
-        this.sessionTx.push({ kind: "einzahlung", betrag: spende, text });
+        this.sessionTx.push({ kind: "einzahlung", betrag: spende, text, konto: row.perKarte });
         gesamtZahlungen += spende;
       }
 
@@ -456,8 +473,12 @@ class Store {
   spielAbbrechen() {
     const k = clone(this.kasse);
     for (const tx of [...this.sessionTx].reverse()) {
-      if (tx.kind === "einzahlung") k.Kassenstand = Math.max(0, round2(k.Kassenstand - tx.betrag));
-      else k.Kassenstand += tx.betrag;
+      if (tx.kind === "einzahlung") {
+        if (tx.konto) k.Kontostand = Math.max(0, round2(k.Kontostand - tx.betrag));
+        else k.Kassenstand = Math.max(0, round2(k.Kassenstand - tx.betrag));
+      } else if (tx.kind === "auszahlung") {
+        k.Kassenstand = round2(k.Kassenstand + tx.betrag);
+      }
       const idx = k.Transaktionen.lastIndexOf(tx.text);
       if (idx >= 0) k.Transaktionen.splice(idx, 1);
     }
@@ -481,6 +502,116 @@ class Store {
     this.pendingGäste = [];
     this.players = [];
     this.gameRunning = false;
+    this.route = null;
+
+    DB.speichereAktuellesSpiel({ players: {}, runde: 0, abgerechnet: false, spieler_reihenfolge: null });
+  }
+
+  /**
+   * Closes the game as "Spielausfall" and applies the chosen fee structure to ALL
+   * Stamm members (not just the ones selected at game start).
+   *
+   * @param {"nurStartgebuehr"|"startgebuehrUndStrafe"|"ohneKosten"} modus
+   * @param {boolean} mitBahngebuehr  whether to deduct Bahngebühr from Kassenstand
+   */
+  spielausfallAbschließen(modus, mitBahngebuehr) {
+    const datum = formatDatum();
+
+    // 1. Roll back whatever berechneStartgebuehren already charged (it only covered
+    //    the players selected at attendance, not the full Stamm list).
+    const k = clone(this.kasse);
+    for (const tx of [...this.sessionTx].reverse()) {
+      if (tx.kind === "einzahlung") {
+        if (tx.konto) k.Kontostand = Math.max(0, round2(k.Kontostand - tx.betrag));
+        else k.Kassenstand = Math.max(0, round2(k.Kassenstand - tx.betrag));
+      } else if (tx.kind === "auszahlung") {
+        k.Kassenstand = round2(k.Kassenstand + tx.betrag);
+      }
+      const idx = k.Transaktionen.lastIndexOf(tx.text);
+      if (idx >= 0) k.Transaktionen.splice(idx, 1);
+    }
+    this.kasse = k;
+
+    const mitglieder = DB.ladeMitglieder();
+    for (const [name, schuld] of Object.entries(this.preSessionSchulden)) {
+      if (mitglieder[name]) mitglieder[name].offene_zahlung = schuld;
+    }
+
+    // 2. Apply the chosen fee to ALL Stamm members.
+    const presentNames = new Set(this.players.filter((p) => p.typ === "Stamm").map((p) => p.name));
+    const stammEintraege = Object.entries(mitglieder).filter(([, d]) => d.typ === "Stamm");
+
+    const archiveStartIndex = this.kasse.Transaktionen.length;
+
+    if (modus !== "ohneKosten") {
+      for (const [name, data] of stammEintraege) {
+        const istAnwesend = presentNames.has(name);
+        let gebuehr = 0;
+        if (modus === "nurStartgebuehr") {
+          gebuehr = this.kasse.Startgeld;
+        } else if (modus === "startgebuehrUndStrafe") {
+          gebuehr = istAnwesend ? this.kasse.Startgeld : this.kasse.Strafe_Stamm;
+        }
+        if (gebuehr > 0) {
+          mitglieder[name].offene_zahlung = round2(data.offene_zahlung + gebuehr);
+        }
+      }
+    }
+
+    // 3. Optionally deduct Bahngebühr.
+    if (mitBahngebuehr && this.kasse.Bahngebuehr > 0) {
+      const text = this._addAuszahlung(this.kasse.Bahngebuehr, `${datum} - Bahngebühr (Spielausfall)`, datum);
+      this.sessionTx.push({ kind: "auszahlung", betrag: this.kasse.Bahngebuehr, text });
+    }
+
+    // 4. Record event in Transaktionen.
+    const modusText =
+      modus === "nurStartgebuehr"
+        ? "Nur Startgebühr"
+        : modus === "startgebuehrUndStrafe"
+        ? "Startgebühr + Strafe"
+        : "Ohne Kosten";
+    const bahnText = mitBahngebuehr && this.kasse.Bahngebuehr > 0 ? ` + Bahngebühr` : "";
+    const archivText = `[${datum}] Spielausfall – ${modusText}${bahnText} – ${stammEintraege.length} Stammmitglieder`;
+    this.kasse.Transaktionen.push(archivText);
+
+    DB.speichereMitglieder(mitglieder);
+    DB.speichereKasse(this.kasse);
+    this.mitglieder = mitglieder;
+
+    // 5. Archive the event so it appears in the Archiv view.
+    const archivePlayers = {};
+    const reihenfolge = stammEintraege.map(([n]) => n).sort();
+    for (const [name, data] of stammEintraege) {
+      archivePlayers[name] = {
+        typ: data.typ,
+        punkte: [0, 0, 0, 0],
+        offene_zahlung: mitglieder[name].offene_zahlung,
+        pumpen: 0,
+        neuner: 0,
+        kranz: 0,
+        position: null,
+      };
+    }
+    const spieltagTransaktionen = this.kasse.Transaktionen.slice(archiveStartIndex);
+    try {
+      DB.archivierSpiel(datum, archivePlayers, spieltagTransaktionen, reihenfolge);
+    } catch (e) {
+      this.archivFehler = "Spielausfall konnte nicht archiviert werden: " + e.message;
+    }
+
+    // 6. Reset game state.
+    this.sessionTx = [];
+    this.preSessionSchulden = {};
+    this.billingRows = [];
+    this.billingGezahlt = {};
+    this.tiebreakExtras = {};
+    this.pumpRank = {};
+    this.pendingAttendees = [];
+    this.pendingGäste = [];
+    this.players = [];
+    this.gameRunning = false;
+    this.abgerechnet = false;
     this.route = null;
 
     DB.speichereAktuellesSpiel({ players: {}, runde: 0, abgerechnet: false, spieler_reihenfolge: null });
