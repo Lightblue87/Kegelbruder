@@ -576,6 +576,26 @@ export const DB = {
     run("UPDATE regeln SET regel_text = ?, betrag_strafe = ? WHERE id = ?", [regelText, betragStrafe, id]);
     persist();
   },
+  neueRegel({ paragraph, paragrafTitel, absatzTitel, regelText, betragStrafe }) {
+    let newId;
+    withTransaction(() => {
+      const nextAbsatz = queryAll("SELECT COALESCE(MAX(absatz), 0) + 1 AS n FROM regeln WHERE paragraph = ?", [paragraph])[0].n;
+      run(
+        "INSERT INTO regeln (paragraph,absatz,paragraf_titel,absatz_titel,regel_text,betrag_strafe) VALUES (?,?,?,?,?,?)",
+        [paragraph, nextAbsatz, paragrafTitel, absatzTitel, regelText, betragStrafe]
+      );
+      newId = sq.exec("SELECT last_insert_rowid()")[0].values[0][0];
+    });
+    persist();
+    return newId;
+  },
+  naechsterParagraph() {
+    return queryAll("SELECT COALESCE(MAX(paragraph), 0) + 1 AS n FROM regeln")[0].n;
+  },
+  loescheRegel(id) {
+    run("DELETE FROM regeln WHERE id = ?", [id]);
+    persist();
+  },
 
   // ---- PWA-only UI settings (theme) — kept separate from the club schema ----
   getSettings() {
