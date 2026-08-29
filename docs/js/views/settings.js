@@ -26,6 +26,7 @@ export function mountSettings(el, vm, ctx) {
   let saved = false;
   let importMsg = null;
   let syncMsg = null;
+  let syncMsg409 = false;
   let syncBusy = false;
   const theme = DB.getSettings().theme || "system";
   let syncSettings = SyncClient.getSettings();
@@ -122,8 +123,9 @@ export function mountSettings(el, vm, ctx) {
               <button class="kb-btn" data-sync-act="download" ${syncBusy ? "disabled" : ""}>Remote laden</button>
               <button class="kb-btn prominent" data-sync-act="upload" ${syncBusy ? "disabled" : ""}>Dieses Gerät hochladen</button>
             </div>
-            ${syncMsg ? `<div class="kb-row-divider"></div><div style="padding:10px 16px;font-size:13px;line-height:1.6;color:${syncMsg.ok ? "var(--kb-success)" : "var(--kb-danger)"}">
-              ${syncMsg.lines.map((l) => escapeHtml(l)).join("<br>")}
+            ${syncMsg ? `<div class="kb-row-divider"></div><div style="padding:10px 16px;font-size:13px;line-height:1.6;color:${syncMsg.ok ? "var(--kb-success)" : "var(--kb-danger)"};display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <span>${syncMsg.lines.map((l) => escapeHtml(l)).join("<br>")}</span>
+              ${syncMsg409 ? `<button class="kb-btn" data-sync-act="download" style="flex-shrink:0">Jetzt laden</button>` : ""}
             </div>` : ""}
             <div class="kb-row-divider"></div>
             <div style="padding:10px 16px;font-size:12px;color:var(--kb-text-secondary)">
@@ -186,11 +188,16 @@ export function mountSettings(el, vm, ctx) {
   function setSyncMessage(ok, lines) {
     // lines can be a string (single line) or an array of strings
     syncMsg = { ok, lines: Array.isArray(lines) ? lines : [lines] };
+    if (ok) syncMsg409 = false;
     syncSettings = SyncClient.getSettings();
     render();
   }
 
   async function runSyncAction(action) {
+    if (!navigator.onLine) {
+      setSyncMessage(false, "Kein Internet. Bitte Verbindung prüfen und erneut versuchen.");
+      return;
+    }
     readSyncSettings();
     syncBusy = true;
     syncMsg = null;
@@ -230,7 +237,8 @@ export function mountSettings(el, vm, ctx) {
       }
     } catch (e) {
       if (e.status === 409) {
-        setSyncMessage(false, "Remote ist neuer als dieses Gerät. Bitte erst Remote laden oder bewusst den richtigen Stand wählen.");
+        syncMsg409 = true;
+        setSyncMessage(false, "Remote ist neuer als dieses Gerät. Bitte erst Remote laden.");
       } else {
         setSyncMessage(false, e.message || String(e));
       }
@@ -314,7 +322,9 @@ export function mountSettings(el, vm, ctx) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `kegelbruder-${new Date().toISOString().slice(0, 10)}.db`;
+      const now = new Date();
+      const ts = now.toISOString().slice(0, 16).replace("T", "_").replace(":", "-");
+      a.download = `kegelbruder-${ts}.db`;
       a.click();
       URL.revokeObjectURL(url);
     });

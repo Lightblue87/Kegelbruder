@@ -541,8 +541,6 @@ class Store {
     const presentNames = new Set(this.players.filter((p) => p.typ === "Stamm").map((p) => p.name));
     const stammEintraege = Object.entries(mitglieder).filter(([, d]) => d.typ === "Stamm");
 
-    const archiveStartIndex = this.kasse.Transaktionen.length;
-
     if (modus !== "ohneKosten") {
       for (const [name, data] of stammEintraege) {
         const istAnwesend = presentNames.has(name);
@@ -557,6 +555,10 @@ class Store {
         }
       }
     }
+
+    // archiveStartIndex captured before Bahngebühr so the lane-fee transaction
+    // is part of the archive entry's slice.
+    const archiveStartIndex = this.kasse.Transaktionen.length;
 
     // 3. Optionally deduct Bahngebühr.
     if (mitBahngebuehr && this.kasse.Bahngebuehr > 0) {
