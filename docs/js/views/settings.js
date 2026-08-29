@@ -122,7 +122,9 @@ export function mountSettings(el, vm, ctx) {
               <button class="kb-btn" data-sync-act="download" ${syncBusy ? "disabled" : ""}>Remote laden</button>
               <button class="kb-btn prominent" data-sync-act="upload" ${syncBusy ? "disabled" : ""}>Dieses Gerät hochladen</button>
             </div>
-            ${syncMsg ? `<div class="kb-row-divider"></div><div style="padding:10px 16px;font-size:13px;color:${syncMsg.ok ? "var(--kb-success)" : "var(--kb-danger)"}">${escapeHtml(syncMsg.text)}</div>` : ""}
+            ${syncMsg ? `<div class="kb-row-divider"></div><div style="padding:10px 16px;font-size:13px;line-height:1.6;color:${syncMsg.ok ? "var(--kb-success)" : "var(--kb-danger)"}">
+              ${syncMsg.lines.map((l) => escapeHtml(l)).join("<br>")}
+            </div>` : ""}
             <div class="kb-row-divider"></div>
             <div style="padding:10px 16px;font-size:12px;color:var(--kb-text-secondary)">
               Offline bleibt dieses Gerät immer arbeitsfähig. Synchronisiert wird nur, wenn du eine Aktion startest und Internet verfügbar ist.
@@ -181,8 +183,9 @@ export function mountSettings(el, vm, ctx) {
     return syncSettings;
   }
 
-  function setSyncMessage(ok, text) {
-    syncMsg = { ok, text };
+  function setSyncMessage(ok, lines) {
+    // lines can be a string (single line) or an array of strings
+    syncMsg = { ok, lines: Array.isArray(lines) ? lines : [lines] };
     syncSettings = SyncClient.getSettings();
     render();
   }
@@ -196,11 +199,19 @@ export function mountSettings(el, vm, ctx) {
       if (action === "status") {
         const remote = await SyncClient.status();
         const revision = remote.revision || "keine";
-        const source = remote.deviceName ? ` von ${remote.deviceName}` : "";
-        setSyncMessage(true, `Remote erreichbar. Revision: ${revision}${source}.`);
+        const lines = [`✓ Remote erreichbar · Revision: ${revision}`];
+        const device = remote.deviceName || remote.device_name || "";
+        const ts = remote.uploadedAt || remote.updatedAt || remote.timestamp || remote.syncedAt || "";
+        if (device || ts) {
+          const parts = [];
+          if (device) parts.push(`Gerät: ${device}`);
+          if (ts) parts.push(`Hochgeladen: ${formatDateTime(ts)}`);
+          lines.push(parts.join(" · "));
+        }
+        setSyncMessage(true, lines);
       } else if (action === "upload") {
         const remote = await SyncClient.upload(DB.exportDb());
-        setSyncMessage(true, `Hochgeladen. Neue Revision: ${remote.revision}.`);
+        setSyncMessage(true, [`Hochgeladen · Neue Revision: ${remote.revision}`]);
       } else if (action === "download") {
         const proceed = () => {
           runDownload().catch((e) => setSyncMessage(false, e.message || String(e)));
@@ -241,7 +252,16 @@ export function mountSettings(el, vm, ctx) {
       vm.laden();
       ladenLocal();
       ctx.refreshSidebar();
-      setSyncMessage(true, `Remote geladen. Revision: ${remote.revision}.`);
+      const lines = [`Remote geladen · Revision: ${remote.revision}`];
+      const device = remote.deviceName || remote.device_name || "";
+      const ts = remote.uploadedAt || remote.updatedAt || remote.timestamp || remote.syncedAt || "";
+      if (device || ts) {
+        const parts = [];
+        if (device) parts.push(`Gerät: ${device}`);
+        if (ts) parts.push(`Hochgeladen: ${formatDateTime(ts)}`);
+        lines.push(parts.join(" · "));
+      }
+      setSyncMessage(true, lines);
     } finally {
       syncBusy = false;
       render();
