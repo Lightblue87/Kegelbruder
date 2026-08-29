@@ -556,6 +556,10 @@ class Store {
       }
     }
 
+    // archiveStartIndex captured before Bahngebühr so the lane-fee transaction
+    // is part of the archive entry's slice.
+    const archiveStartIndex = this.kasse.Transaktionen.length;
+
     // 3. Optionally deduct Bahngebühr.
     if (mitBahngebuehr && this.kasse.Bahngebuehr > 0) {
       const text = this._addAuszahlung(this.kasse.Bahngebuehr, `${datum} - Bahngebühr (Spielausfall)`, datum);
@@ -563,9 +567,6 @@ class Store {
     }
 
     // 4. Record event in Transaktionen.
-    // archiveStartIndex is captured here — after the Bahngebühr booking — so
-    // the Bahngebühr transaction is included in the archive entry.
-    const archiveStartIndex = this.kasse.Transaktionen.length;
     const modusText =
       modus === "nurStartgebuehr"
         ? "Nur Startgebühr"

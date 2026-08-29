@@ -199,15 +199,22 @@ function applyMigrations() {
   if (!mitgliederCols.includes("vollname")) {
     sq.run("ALTER TABLE mitglieder ADD COLUMN vollname TEXT NOT NULL DEFAULT ''");
   }
-  // Seed regeln if the table is empty (fresh DB or imported DB without rules)
+  // Seed regeln only on a truly fresh DB (no marker set), not when a user has
+  // intentionally emptied the table. The marker is set once on first seed and
+  // persists across imports so deleted rules stay deleted.
+  const regelnSeeded = sq.exec("SELECT wert FROM kasse_einstellungen WHERE schluessel = 'regeln_seeded'")[0]?.values[0]?.[0];
   const hasRegeln = sq.exec("SELECT COUNT(*) FROM regeln")[0].values[0][0] > 0;
-  if (!hasRegeln) {
+  if (!hasRegeln && !regelnSeeded) {
     for (const [para, abs, ptitel, atitel, text, betrag] of DEFAULT_REGELN) {
       sq.run(
         "INSERT INTO regeln (paragraph,absatz,paragraf_titel,absatz_titel,regel_text,betrag_strafe) VALUES (?,?,?,?,?,?)",
         [para, abs, ptitel, atitel, text, betrag]
       );
     }
+    sq.run("INSERT OR REPLACE INTO kasse_einstellungen (schluessel, wert) VALUES ('regeln_seeded', '1')");
+  } else if (hasRegeln && !regelnSeeded) {
+    // Imported DB that already has rules — mark as seeded so future empties aren't re-seeded.
+    sq.run("INSERT OR REPLACE INTO kasse_einstellungen (schluessel, wert) VALUES ('regeln_seeded', '1')");
   }
 }
 
