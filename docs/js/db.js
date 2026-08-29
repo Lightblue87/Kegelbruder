@@ -568,6 +568,15 @@ export const DB = {
     persist();
   },
 
+  löscheHistorieEintrag(spielId) {
+    withTransaction(() => {
+      run("DELETE FROM historie_transaktionen WHERE spiel_id = ?", [spielId]);
+      run("DELETE FROM historie_spieler WHERE spiel_id = ?", [spielId]);
+      run("DELETE FROM historie WHERE id = ?", [spielId]);
+    });
+    persist();
+  },
+
   // ---- Regeln ----
   ladeRegeln() {
     return queryAll("SELECT id, paragraph, absatz, paragraf_titel, absatz_titel, regel_text, betrag_strafe FROM regeln ORDER BY paragraph, absatz, id");

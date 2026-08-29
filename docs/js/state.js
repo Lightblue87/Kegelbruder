@@ -541,8 +541,6 @@ class Store {
     const presentNames = new Set(this.players.filter((p) => p.typ === "Stamm").map((p) => p.name));
     const stammEintraege = Object.entries(mitglieder).filter(([, d]) => d.typ === "Stamm");
 
-    const archiveStartIndex = this.kasse.Transaktionen.length;
-
     if (modus !== "ohneKosten") {
       for (const [name, data] of stammEintraege) {
         const istAnwesend = presentNames.has(name);
@@ -565,6 +563,9 @@ class Store {
     }
 
     // 4. Record event in Transaktionen.
+    // archiveStartIndex is captured here — after the Bahngebühr booking — so
+    // the Bahngebühr transaction is included in the archive entry.
+    const archiveStartIndex = this.kasse.Transaktionen.length;
     const modusText =
       modus === "nurStartgebuehr"
         ? "Nur Startgebühr"
